@@ -1,0 +1,293 @@
+POST [http://localhost:5000/api/register](http://localhost:5000/api/register)
+
+{
+"Name": "Riya Patel",
+"Email": "[riya@gmail.com](mailto:riya@gmail.com)",
+"Password": "123456",
+"RoleName": "Admin",
+"CompanyName": "Google",
+"DesignationName": "Developer"
+}
+
+POST [http://localhost:5000/api/login](http://localhost:5000/api/login)
+
+{
+"Email": "[riya@gmail.com](mailto:riya@gmail.com)",
+"Password": "123456"
+}
+
+Below is a complete list of APIs you can test in Postman for your Express.js + Sequelize + MySQL backend.
+
+I’ll include positive (valid) and negative (invalid) test cases so you can verify validation, errors, and edge cases.
+
+1. Register User API
+
+Endpoint
+
+POST [http://localhost:5000/api/register](http://localhost:5000/api/register)
+
+Body JSON
+
+Positive Case
+
+{
+"name": "Riya Patel",
+"email": "[riya@gmail.com](mailto:riya@gmail.com)",
+"password": "123456",
+"roleId": 1,
+"companyId": 1,
+"designationId": 1
+}
+
+Expected response
+
+{
+"message": "User registered successfully"
+}
+
+Negative Case 1 – Missing Name
+
+{
+"email": "[riya@gmail.com](mailto:riya@gmail.com)",
+"password": "123456",
+"roleId": 1,
+"companyId": 1,
+"designationId": 1
+}
+
+Expected
+
+{
+"error": "Name is required"
+}
+
+Negative Case 2 – Invalid Email
+
+{
+"name": "Riya",
+"email": "riya",
+"password": "123456",
+"roleId": 1,
+"companyId": 1,
+"designationId": 1
+}
+
+Expected
+
+{
+"error": "Invalid email format"
+}
+
+Negative Case 3 – Email Already Exists
+
+{
+"name": "Riya Patel",
+"email": "[riya@gmail.com](mailto:riya@gmail.com)",
+"password": "123456",
+"roleId": 1,
+"companyId": 1,
+"designationId": 1
+}
+
+Expected
+
+{
+"error": "Email already registered"
+}
+
+Negative Case 4 – Empty Password
+
+{
+"name": "Riya Patel",
+"email": "[riya2@gmail.com](mailto:riya2@gmail.com)",
+"password": "",
+"roleId": 1,
+"companyId": 1,
+"designationId": 1
+}
+
+Expected
+
+{
+"error": "Password is required"
+}
+
+2. Login API
+
+Endpoint
+
+POST [http://localhost:5000/api/login](http://localhost:5000/api/login)
+
+Positive Case
+
+{
+"email": "[riya@gmail.com](mailto:riya@gmail.com)",
+"password": "123456"
+}
+
+Expected
+
+{
+"token": "JWT_TOKEN"
+}
+
+Negative Case 1 – Wrong Password
+
+{
+"email": "[riya@gmail.com](mailto:riya@gmail.com)",
+"password": "wrongpass"
+}
+
+Expected
+
+{
+"error": "Invalid credentials"
+}
+
+Negative Case 2 – Email Not Found
+
+{
+"email": "[notfound@gmail.com](mailto:notfound@gmail.com)",
+"password": "123456"
+}
+
+Expected
+
+{
+"error": "User not found"
+}
+
+3. Get Users (Pagination / Search / Sort / Filter)
+
+Endpoint
+
+GET [http://localhost:5000/api/users](http://localhost:5000/api/users)
+
+Positive Case
+
+Basic request
+
+GET /api/users
+
+Pagination
+
+GET /api/users?page=1
+
+Search
+
+GET /api/users?search=riya
+
+Sorting
+
+GET /api/users?sortField=Email&sortOrder=ASC
+
+Filtering
+
+GET /api/users?role=1&company=2
+
+Combined
+
+GET /api/users?page=1&search=riya&sortField=Email&sortOrder=ASC&role=1&company=2
+
+Negative Case – Invalid Sort Field
+
+GET /api/users?sortField=password
+
+Expected
+
+Server should fallback to default sorting.
+
+Negative Case – Invalid Page
+
+GET /api/users?page=-1
+
+Expected
+
+Server should return page 1 or error.
+
+4. Get Single User
+
+Endpoint
+
+GET [http://localhost:5000/api/users/1](http://localhost:5000/api/users/1)
+
+Positive Case
+
+GET /api/users/1
+
+Expected
+
+User data.
+
+Negative Case
+
+GET /api/users/999
+
+Expected
+
+{
+"error": "User not found"
+}
+
+5. Update User
+
+Endpoint
+
+PUT [http://localhost:5000/api/users/1](http://localhost:5000/api/users/1)
+
+Positive Case
+
+{
+"name": "Riya Updated",
+"email": "[riya@gmail.com](mailto:riya@gmail.com)"
+}
+
+Negative Case
+
+Invalid email
+
+{
+"email": "invalidemail"
+}
+
+Expected
+
+{
+"error": "Invalid email format"
+}
+
+6. Delete User
+
+Endpoint
+
+DELETE [http://localhost:5000/api/users/1](http://localhost:5000/api/users/1)
+
+Positive Case
+
+Expected
+
+{
+"message": "User deleted"
+}
+
+Negative Case
+
+DELETE /api/users/999
+
+Expected
+
+{
+"error": "User not found"
+}
+
+Complete API List
+
+Method  Endpoint           Purpose
+POST    /api/register      Register user
+POST    /api/login         Login user
+GET     /api/users         Get users
+GET     /api/users/:id     Get single user
+PUT     /api/users/:id     Update user
+DELETE  /api/users/:id     Delete user
+
+If you want, I can also give you 30+ professional Postman test cases like SQL Injection test, XSS input test, empty body test, large payload test, invalid JSON test, and token missing test. These help make API testing look more professional.
