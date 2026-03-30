@@ -1,117 +1,450 @@
-import React, { useState, useRef } from "react"
-import { CModal, CModalHeader, CModalTitle, CModalBody, CModalFooter, CButton, CFormInput, CFormSelect, CSpinner } from "@coreui/react"
-import api from "../../api/api"
+    You’re very close — the issue is mainly about **how redirect is handled + clearing it on logout**.
 
-const AddUserForm = ({ visible, meta, onClose, onSaved }) => {
+Right now:
 
-    const [form, setForm] = useState({ Name: "", Email: "", Password: "", CompanyName: "", RoleName: "", DesignationName: "" })
-    const [errors, setErrors] = useState({})
-    const [isSaving, setIsSaving] = useState(false)
-    const resetForm = () => {
-        setForm({ Name: "", Email: "", Password: "", CompanyName: "", RoleName: "", DesignationName: "" })
-        setErrors({})
-    }
-    const refs = {
-        Name: useRef(),
-        Email: useRef(),
-        Password: useRef(),
-        CompanyName: useRef(),
-        RoleName: useRef(),
-        DesignationName: useRef()
-    }
+* You correctly pass `?redirect=/project` when user is not logged in ✅
+* After login → you navigate to that redirect ✅
+* BUT after logout → that old redirect still exists in URL ❌
 
-    const validateField = (name, value) => {
-        let message = ""
+So it keeps reopening `/project` instead of default `/invoices`.
 
-        if (!value || !value.trim()) { message = `${name} is required` }
-        if (name === "Email" && value) {
-            const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/
-            if (!emailRegex.test(value)) message = "Invalid email format"
-        }
-        if (name === "Password" && value) {
-            const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/
-            if (!passwordRegex.test(value))  message = "Password must be 6+ chars, include uppercase, lowercase, number" ;
-        }
-        // if (name === "Password" && value && value.length < 6) { message = "Password must be at least 6 characters" }
-        setErrors(prev => ({ ...prev, [name]: message }))
-        return message
-    }
+---
 
-    const handleChange = (e) => {
-        const { name, value } = e.target
-        setForm(prev => ({ ...prev, [name]: value }))
-        if (!value.trim()) validateField(name, value)
-        else setErrors(prev => ({ ...prev, [name]: "" }))
-    }
+# 🔴 Root Cause
 
-    const handleBlur = (e) => { validateField(e.target.name, e.target.value) }
+The problem is here:
 
-    const validateForm = () => {
-        let newErrors = {}
-        Object.keys(form).forEach(field => {
-            const msg = validateField(field, form[field])
-            if (msg) newErrors[field] = msg
-        })
-        setErrors(newErrors)
+```js
+navigate(redirect);
+```
 
-        const firstError = Object.keys(newErrors)[0]
-        if (firstError) {
-            refs[firstError].current.focus()
-            document.querySelector(".is-invalid")?.scrollIntoView({ behavior: "smooth", block: "center" })
-            return false
-        }
-        return true
-    }
+You are **always using redirect from URL params**, even after logout.
 
-    const handleSave = async () => {
-        if (!validateForm()) return
-        try {
-            setIsSaving(true)
-            await api.post("/register", form)
-            onSaved()
-            onClose()
-            setForm({ Name: "", Email: "", Password: "", CompanyName: "", RoleName: "", DesignationName: "" })
-            setErrors({})
-        } catch (err) {
-            alert(err.response?.data?.message || "Failed to add user")
-        } finally {
-            setIsSaving(false)
-        }
-    }
+And when you logout:
 
-    return (
-        // Add user form
-        <CModal visible={visible} backdrop={isSaving ? "static" : true} keyboard={!isSaving} onClose={() => { if (!isSaving) { resetForm(), onClose() } }} >
-            <CModalHeader closeButton={false} className="d-flex justify-content-between align-items-center">
-                <CModalTitle className="mb-0">Add User</CModalTitle>
-                <span style={isSaving ? { cursor: "not-allowed" } : {}}> <CButton type="button" className="btn-close" disabled={isSaving} onClick={() => !isSaving && onClose()} /> </span>
-            </CModalHeader>
-            <CModalBody>
-                <CFormInput label="Name" name="Name" value={form.Name} onChange={handleChange} onBlur={handleBlur} invalid={!!errors.Name} ref={refs.Name} className="mb-2" disabled={isSaving} />
-                <div className="text-danger">{errors.Name}</div>
-                <CFormInput label="Email" name="Email" value={form.Email} onChange={handleChange} onBlur={handleBlur} invalid={!!errors.Email} ref={refs.Email} className="mb-2" disabled={isSaving} />
-                <div className="text-danger">{errors.Email}</div>
-                <CFormInput type="password" label="Password" name="Password" value={form.Password} onChange={handleChange} onBlur={handleBlur} invalid={!!errors.Password} ref={refs.Password} className="mb-2" disabled={isSaving} />
-                <div className="text-danger">{errors.Password}</div>
-                <CFormSelect label="Company" name="CompanyName" value={form.CompanyName} onChange={handleChange} invalid={!!errors.CompanyName} ref={refs.CompanyName} disabled={isSaving} className="mb-2" >
-                    <option value="">-- Select Company --</option>
-                    {meta.companies.map(c => (<option key={c.CompanyID} value={c.CompanyName}>{c.CompanyName}</option>))}
-                </CFormSelect>
-                <CFormSelect label="Role" name="RoleName" value={form.RoleName} onChange={handleChange} invalid={!!errors.RoleName} ref={refs.RoleName} disabled={isSaving} className="mb-2" >
-                    <option value="">-- Select Role --</option>
-                    {meta.roles.map(r => (<option key={r.RoleID} value={r.RoleName}>{r.RoleName}</option>))}
-                </CFormSelect>
-                <CFormSelect label="Designation" name="DesignationName" value={form.DesignationName} onChange={handleChange} invalid={!!errors.DesignationName} ref={refs.DesignationName} disabled={isSaving} className="mb-2" >
-                    <option value="">-- Select Designation --</option>
-                    {meta.designations.map(d => (<option key={d.DesignationID} value={d.DesignationName}>{d.DesignationName}</option>))}
-                </CFormSelect>
-            </CModalBody>
-            <CModalFooter>
-                <span style={isSaving ? { cursor: "not-allowed" } : {}}> <CButton onClick={() => { resetForm(), onClose() }} disabled={isSaving}>Cancel</CButton> </span>
-                <CButton color="primary" onClick={handleSave} disabled={isSaving}> {isSaving ? <CSpinner size="sm" /> : "Add User"} </CButton>
-            </CModalFooter>
-        </CModal>
-    )
+* URL is still like → `/signin?redirect=/project`
+* So login again → goes to `/project` again
+
+---
+
+# ✅ Proper Fix (Clean Solution)
+
+## ✅ 1. Fix Logout → Always go to clean signin URL
+
+👉 In `UserProfilePopover.js`
+
+Change this:
+
+```js
+navigate("/signin");
+```
+
+### ✅ Update to:
+
+```js
+navigate("/signin", { replace: true });
+```
+
+👉 OR even better (remove redirect completely):
+
+```js
+navigate("/signin", { replace: true, state: {} });
+```
+
+---
+
+## ✅ 2. Clear redirect after successful login
+
+👉 In your `Login.js`
+
+Change this:
+
+```js
+navigate(redirect);
+```
+
+### ✅ Update:
+
+```js
+navigate(redirect, { replace: true });
+```
+
+👉 This removes query params from history
+
+---
+
+## ✅ 3. Fix ProtectedRoute (IMPORTANT ⚠️)
+
+🚫 You are doing this (WRONG):
+
+```js
+return navigate(`/signin?redirect=${encodeURIComponent(location.pathname)}`)
+```
+
+👉 `navigate()` should NOT be returned inside render.
+
+---
+
+### ✅ Replace with:
+
+```js
+return (
+  <Navigate
+    to={`/signin?redirect=${encodeURIComponent(location.pathname)}`}
+    replace
+  />
+);
+```
+
+---
+
+## ✅ 4. Fix App.jsx logout redirect logic
+
+This line is wrong:
+
+```js
+navigate(redirect);
+```
+
+👉 Because `redirect` may still be `/project`
+
+---
+
+### ✅ Replace with:
+
+```js
+navigate("/signin");
+```
+
+---
+
+# 💡 Optional Improvement (Best Practice)
+
+Instead of using query params, you can use **location state**
+
+### In ProtectedRoute:
+
+```js
+return (
+  <Navigate
+    to="/signin"
+    replace
+    state={{ from: location.pathname }}
+  />
+);
+```
+
+---
+
+### In Login:
+
+```js
+const location = useLocation();
+const redirect = location.state?.from || "/invoices";
+```
+
+👉 This is cleaner & auto-clears after navigation
+
+---
+
+# ✅ Final Behavior After Fix
+
+### Scenario:
+
+1. User opens → `/project`
+2. Redirected → `/signin?redirect=/project`
+3. Login → goes to `/project` ✅
+4. Logout → goes to `/signin` ✅ (NO redirect param)
+5. Login again → goes to `/invoices` ✅
+
+---
+
+# 🔥 Summary
+
+### You must:
+
+✔ Use `<Navigate />` instead of `navigate()` in render
+✔ Use `replace: true` in navigation
+✔ Remove redirect param after login
+✔ Always go to `/signin` clean on logout
+
+---
+
+If you want, I can refactor your whole auth flow (ProtectedRoute + App + Login) into a **clean production-ready version** — your current setup is good but slightly overcomplicated.
+------------------------------------
+Good question — I’ll give you **exact files + exact lines to change** so you don’t get confused.
+
+---
+
+# ✅ 1. **ProtectedRoute.js**
+
+### 🔴 Problem:
+
+You are using `navigate()` inside render (wrong)
+
+### 🔧 Change THIS:
+
+```js
+return navigate(`/signin?redirect=${encodeURIComponent(location.pathname)}`)
+```
+
+### ✅ Replace WITH:
+
+```js
+return (
+  <Navigate
+    to={`/signin?redirect=${encodeURIComponent(location.pathname)}`}
+    replace
+  />
+);
+```
+
+---
+
+# ✅ 2. **Login.js (signin page)**
+
+### 🔴 Problem:
+
+Redirect param stays in URL history
+
+### 🔧 Find:
+
+```js
+navigate(redirect);
+```
+
+### ✅ Replace WITH:
+
+```js
+navigate(redirect, { replace: true });
+```
+
+---
+
+# ✅ 3. **UserProfilePopover.js (Logout button)**
+
+### 🔴 Problem:
+
+Old redirect param remains after logout
+
+### 🔧 Find:
+
+```js
+navigate("/signin");
+```
+
+### ✅ Replace WITH:
+
+```js
+navigate("/signin", { replace: true });
+```
+
+---
+
+# ✅ 4. **App.jsx (IMPORTANT ⚠️)**
+
+### 🔴 Problem:
+
+After logout, it uses old redirect param again
+
+### 🔧 Find:
+
+```js
+navigate(redirect);
+```
+
+### ✅ Replace WITH:
+
+```js
+navigate("/signin");
+```
+
+---
+
+# 🧠 Optional (Best Practice – Cleaner)
+
+👉 Instead of query param (`?redirect=`), use **location.state**
+
+---
+
+## 🔁 ProtectedRoute.js
+
+```js
+return (
+  <Navigate
+    to="/signin"
+    replace
+    state={{ from: location.pathname }}
+  />
+);
+```
+
+---
+
+## 🔁 Login.js
+
+```js
+import { useLocation } from "react-router-dom";
+
+const location = useLocation();
+const redirect = location.state?.from || "/invoices";
+```
+
+---
+
+# 🎯 Final Checklist
+
+| File                    | Change                                   |
+| ----------------------- | ---------------------------------------- |
+| ✅ ProtectedRoute.js     | replace `navigate()` with `<Navigate />` |
+| ✅ Login.js              | add `{ replace: true }`                  |
+| ✅ UserProfilePopover.js | fix logout navigation                    |
+| ✅ App.jsx               | remove redirect usage on logout          |
+
+---
+
+# 🚀 After this fix
+
+✔ Copy `/project` → opens after login
+✔ Logout → goes to clean `/signin`
+✔ Login again → opens `/invoices` (default)
+
+---
+
+If you want, I can also:
+👉 simplify your whole auth flow (React Query + Redux + routing)
+👉 or fix your invoice route/entity logic (you commented it out 👀)
+------------------------------
+Yes — I understood 👍
+You don’t want it only for `/project`, you want it for **ANY protected route dynamically**.
+
+Good news: your current approach already supports that — you just need to **fix implementation**, not logic.
+
+---
+
+# 🎯 What you actually want
+
+### Scenario (for ANY route):
+
+1. User opens → `/reports` OR `/records` OR `/invoices/123`
+2. Not logged in → redirect to login
+3. After login → go back to SAME page ✅
+4. After logout → go to clean `/signin` (NO old redirect) ✅
+5. Login again normally → go to `/invoices` (default) ✅
+
+---
+
+# ✅ Final Correct Implementation (Dynamic for ALL routes)
+
+## ✅ 1. ProtectedRoute.js (MAIN LOGIC)
+
+### 🔧 Replace your token check block with:
+
+```js
+const token = localStorage.getItem('auth_token');
+
+if (!token) {
+  return (
+    <Navigate
+      to="/signin"
+      replace
+      state={{ from: location.pathname }} // 🔥 dynamic route
+    />
+  );
 }
+```
 
-export default AddUserForm
+👉 This automatically works for:
+
+* `/project`
+* `/reports`
+* `/anything`
+  No need to hardcode anything ✅
+
+---
+
+## ✅ 2. Login.js (Use dynamic redirect)
+
+### 🔧 Add:
+
+```js
+import { useLocation } from "react-router-dom";
+```
+
+### 🔧 Then:
+
+```js
+const location = useLocation();
+const redirect = location.state?.from || "/invoices";
+```
+
+---
+
+### 🔧 Replace:
+
+```js
+navigate(redirect);
+```
+
+### ✅ With:
+
+```js
+navigate(redirect, { replace: true });
+```
+
+---
+
+## ✅ 3. Logout (UserProfilePopover.js)
+
+### 🔧 Replace:
+
+```js
+navigate("/signin");
+```
+
+### ✅ With:
+
+```js
+navigate("/signin", { replace: true });
+```
+
+👉 This ensures:
+
+* Old route is NOT remembered
+* No redirect loop
+
+---
+
+## ✅ 4. App.jsx (IMPORTANT CLEANUP)
+
+### 🔴 REMOVE this logic:
+
+```js
+const redirect = searchParams.get('redirect')
+```
+
+AND
+
+```js
+navigate(redirect);
+```
+
+---
+
+### ✅ Replace logout fallback with:
+
+```js
+navigate("/signin");
+```
+
+---
+
+# 🔥 Why this is BEST approach
+
+| Method                       | Problem                    |
+| ---------------------------- | -------------------------- |
+| ❌ Query param (`?redirect=`) | stays in URL → causes bugs |
+| ✅ location.state             | temporary → auto cleared   |
+
+
+
