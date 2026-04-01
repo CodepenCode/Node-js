@@ -1,450 +1,455 @@
-    You’re very close — the issue is mainly about **how redirect is handled + clearing it on logout**.
+Got it — you want **ProductFormSheet** to behave exactly like **ClientFormSheet** for unsaved changes:
 
-Right now:
+👉 Show confirmation dialog when:
 
-* You correctly pass `?redirect=/project` when user is not logged in ✅
-* After login → you navigate to that redirect ✅
-* BUT after logout → that old redirect still exists in URL ❌
-
-So it keeps reopening `/project` instead of default `/invoices`.
+* clicking **outside (overlay click)**
+* clicking **close icon (X)**
+* clicking **Close button**
 
 ---
 
-# 🔴 Root Cause
+## ✅ What you need to add
 
-The problem is here:
-
-```js
-navigate(redirect);
-```
-
-You are **always using redirect from URL params**, even after logout.
-
-And when you logout:
-
-* URL is still like → `/signin?redirect=/project`
-* So login again → goes to `/project` again
-
----
-
-# ✅ Proper Fix (Clean Solution)
-
-## ✅ 1. Fix Logout → Always go to clean signin URL
-
-👉 In `UserProfilePopover.js`
-
-Change this:
+### 1. Add state + ref (same as client form)
 
 ```js
-navigate("/signin");
-```
+import { useRef } from 'react';
 
-### ✅ Update to:
-
-```js
-navigate("/signin", { replace: true });
-```
-
-👉 OR even better (remove redirect completely):
-
-```js
-navigate("/signin", { replace: true, state: {} });
+const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+const dirtyRef = useRef(false);
 ```
 
 ---
 
-## ✅ 2. Clear redirect after successful login
-
-👉 In your `Login.js`
-
-Change this:
+### 2. Add handler functions
 
 ```js
-navigate(redirect);
-```
+const handleSheetOpenChange = (open) => {
+  if (!open) {
+    if (dirtyRef.current) {
+      setShowUnsavedWarning(true);
+    } else {
+      onClose();
+    }
+  }
+};
 
-### ✅ Update:
+const confirmClose = () => {
+  setShowUnsavedWarning(false);
+  onClose();
+};
 
-```js
-navigate(redirect, { replace: true });
-```
-
-👉 This removes query params from history
-
----
-
-## ✅ 3. Fix ProtectedRoute (IMPORTANT ⚠️)
-
-🚫 You are doing this (WRONG):
-
-```js
-return navigate(`/signin?redirect=${encodeURIComponent(location.pathname)}`)
-```
-
-👉 `navigate()` should NOT be returned inside render.
-
----
-
-### ✅ Replace with:
-
-```js
-return (
-  <Navigate
-    to={`/signin?redirect=${encodeURIComponent(location.pathname)}`}
-    replace
-  />
-);
+const cancelClose = () => {
+  setShowUnsavedWarning(false);
+};
 ```
 
 ---
 
-## ✅ 4. Fix App.jsx logout redirect logic
+### 3. Replace Sheet onOpenChange
 
-This line is wrong:
+❌ OLD:
 
 ```js
-navigate(redirect);
+<Sheet open={isOpen} onOpenChange={onClose}>
 ```
 
-👉 Because `redirect` may still be `/project`
-
----
-
-### ✅ Replace with:
+✅ NEW:
 
 ```js
-navigate("/signin");
+<Sheet open={isOpen} onOpenChange={handleSheetOpenChange}>
 ```
 
 ---
 
-# 💡 Optional Improvement (Best Practice)
+### 4. Track `dirty` inside Formik
 
-Instead of using query params, you can use **location state**
-
-### In ProtectedRoute:
+Inside Formik render:
 
 ```js
-return (
-  <Navigate
-    to="/signin"
-    replace
-    state={{ from: location.pathname }}
-  />
-);
+{({ values, handleChange, setFieldValue, resetForm, dirty }) => {
+  dirtyRef.current = dirty;
 ```
 
 ---
 
-### In Login:
+### 5. Add Close Button (important)
 
-```js
-const location = useLocation();
-const redirect = location.state?.from || "/invoices";
-```
+Add this in footer (like client form):
 
-👉 This is cleaner & auto-clears after navigation
-
----
-
-# ✅ Final Behavior After Fix
-
-### Scenario:
-
-1. User opens → `/project`
-2. Redirected → `/signin?redirect=/project`
-3. Login → goes to `/project` ✅
-4. Logout → goes to `/signin` ✅ (NO redirect param)
-5. Login again → goes to `/invoices` ✅
-
----
-
-# 🔥 Summary
-
-### You must:
-
-✔ Use `<Navigate />` instead of `navigate()` in render
-✔ Use `replace: true` in navigation
-✔ Remove redirect param after login
-✔ Always go to `/signin` clean on logout
-
----
-
-If you want, I can refactor your whole auth flow (ProtectedRoute + App + Login) into a **clean production-ready version** — your current setup is good but slightly overcomplicated.
-------------------------------------
-Good question — I’ll give you **exact files + exact lines to change** so you don’t get confused.
-
----
-
-# ✅ 1. **ProtectedRoute.js**
-
-### 🔴 Problem:
-
-You are using `navigate()` inside render (wrong)
-
-### 🔧 Change THIS:
-
-```js
-return navigate(`/signin?redirect=${encodeURIComponent(location.pathname)}`)
-```
-
-### ✅ Replace WITH:
-
-```js
-return (
-  <Navigate
-    to={`/signin?redirect=${encodeURIComponent(location.pathname)}`}
-    replace
-  />
-);
+```jsx
+<Button
+  type="button"
+  onClick={handleSheetOpenChange.bind(null, false)}
+  variant="outline"
+>
+  {t('close')}
+</Button>
 ```
 
 ---
 
-# ✅ 2. **Login.js (signin page)**
+### 6. Add Dialog for warning (VERY IMPORTANT)
 
-### 🔴 Problem:
+👉 Put this **outside Form but inside Sheet (same as client)**
 
-Redirect param stays in URL history
+```jsx
+<Dialog
+  open={showUnsavedWarning}
+  onOpenChange={(open) => {
+    if (!open) cancelClose();
+  }}
+>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>{t('unsavedChanges')}</DialogTitle>
+    </DialogHeader>
 
-### 🔧 Find:
+    <p>{t('unsavedChangesMessage')}</p>
 
-```js
-navigate(redirect);
-```
-
-### ✅ Replace WITH:
-
-```js
-navigate(redirect, { replace: true });
-```
-
----
-
-# ✅ 3. **UserProfilePopover.js (Logout button)**
-
-### 🔴 Problem:
-
-Old redirect param remains after logout
-
-### 🔧 Find:
-
-```js
-navigate("/signin");
-```
-
-### ✅ Replace WITH:
-
-```js
-navigate("/signin", { replace: true });
+    <div className="flex justify-end gap-3 mt-4">
+      <Button onClick={cancelClose} variant="outline">
+        {t('no')}
+      </Button>
+      <Button onClick={confirmClose} variant="destructive">
+        {t('yes')}
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
 ```
 
 ---
 
-# ✅ 4. **App.jsx (IMPORTANT ⚠️)**
+## ✅ Final Behavior
 
-### 🔴 Problem:
+Now ProductFormSheet will:
 
-After logout, it uses old redirect param again
+✔ Detect unsaved changes
+✔ Block closing on:
 
-### 🔧 Find:
+* outside click
+* ESC
+* close icon
+* Close button
+
+✔ Show confirmation dialog
+✔ Close only when user clicks **Yes**
+
+---
+
+## 🔥 Bonus (important improvement)
+
+Right now your **cancel button resets form without warning**.
+If you want SAME behavior as client form:
+
+Replace:
 
 ```js
-navigate(redirect);
+onClick={() => resetForm()}
 ```
 
-### ✅ Replace WITH:
+With:
 
 ```js
-navigate("/signin");
+onClick={() => {
+  if (dirty) {
+    setShowUnsavedWarning(true);
+  } else {
+    resetForm();
+  }
+}}
 ```
-
----
-
-# 🧠 Optional (Best Practice – Cleaner)
-
-👉 Instead of query param (`?redirect=`), use **location.state**
-
----
-
-## 🔁 ProtectedRoute.js
-
-```js
-return (
-  <Navigate
-    to="/signin"
-    replace
-    state={{ from: location.pathname }}
-  />
-);
-```
-
----
-
-## 🔁 Login.js
-
-```js
-import { useLocation } from "react-router-dom";
-
-const location = useLocation();
-const redirect = location.state?.from || "/invoices";
-```
-
----
-
-# 🎯 Final Checklist
-
-| File                    | Change                                   |
-| ----------------------- | ---------------------------------------- |
-| ✅ ProtectedRoute.js     | replace `navigate()` with `<Navigate />` |
-| ✅ Login.js              | add `{ replace: true }`                  |
-| ✅ UserProfilePopover.js | fix logout navigation                    |
-| ✅ App.jsx               | remove redirect usage on logout          |
-
----
-
-# 🚀 After this fix
-
-✔ Copy `/project` → opens after login
-✔ Logout → goes to clean `/signin`
-✔ Login again → opens `/invoices` (default)
 
 ---
 
 If you want, I can also:
-👉 simplify your whole auth flow (React Query + Redux + routing)
-👉 or fix your invoice route/entity logic (you commented it out 👀)
-------------------------------
-Yes — I understood 👍
-You don’t want it only for `/project`, you want it for **ANY protected route dynamically**.
+✅ Make this reusable hook (`useUnsavedChangesGuard`)
+✅ Apply same logic across all sheets (clean architecture)
 
-Good news: your current approach already supports that — you just need to **fix implementation**, not logic.
+Just tell me 👍
 
----
 
-# 🎯 What you actually want
+---------------------------------
 
-### Scenario (for ANY route):
+import { useState, useEffect, useRef } from 'react';
+import { Formik, Form, ErrorMessage } from 'formik';
+import * as Yup from 'yup';
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
+import { FloatLabelInput } from '../Common/FloatLabelInput';
+import { FloatLabelSelect } from '../Common/FloatLabelSelect';
+import { useTranslation } from 'react-i18next';
+import { Button } from '../ui/button';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { getMasterData } from '../../api/services/masterDataServices';
+import { createProduct } from '../../api/services/productServices';
+import { Message } from '../ui/message';
+import { CurrencyInput } from '../Common/CurrencyInput';
+import { FloatLabelTextarea } from '../Common/FloatLabelTextarea';
+import { Checkbox } from '../ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { CircleCheck, RefreshCcw } from 'lucide-react';
 
-1. User opens → `/reports` OR `/records` OR `/invoices/123`
-2. Not logged in → redirect to login
-3. After login → go back to SAME page ✅
-4. After logout → go to clean `/signin` (NO old redirect) ✅
-5. Login again normally → go to `/invoices` (default) ✅
+export default function ProductFormSheet({ isOpen, onClose, product, updateRecord }) {
 
----
+  const { t, i18n } = useTranslation();
+  const isEdit = !!product;
 
-# ✅ Final Correct Implementation (Dynamic for ALL routes)
+  const [vatList, setVatList] = useState([]);
+  const [showVATExemptionModal, setShowVATExemptionModal] = useState(false);
+  const [error, setError] = useState("");
 
-## ✅ 1. ProtectedRoute.js (MAIN LOGIC)
+  // ✅ Unsaved changes states
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const dirtyRef = useRef(false);
 
-### 🔧 Replace your token check block with:
+  const handleSheetOpenChange = (open) => {
+    if (!open) {
+      if (dirtyRef.current) {
+        setShowUnsavedWarning(true);
+      } else {
+        onClose();
+      }
+    }
+  };
 
-```js
-const token = localStorage.getItem('auth_token');
+  const confirmClose = () => {
+    setShowUnsavedWarning(false);
+    onClose();
+  };
 
-if (!token) {
+  const cancelClose = () => {
+    setShowUnsavedWarning(false);
+  };
+
+  const { data: masterData } = useQuery({
+    queryKey: ['masterData'],
+    queryFn: getMasterData,
+    enabled: isOpen,
+  });
+
+  useEffect(() => {
+    if (masterData) {
+      setVatList(masterData.data.vatType.map((obj) => ({
+        ...obj,
+        VATTypeName: `${t(obj.VATTypeName)} (${parseFloat(obj.VATTypeValue)}%)`,
+      })));
+    }
+  }, [masterData, i18n.language]);
+
+  const createProductMutation = useMutation({
+    mutationFn: createProduct,
+    onSuccess: (res) => {
+      if (res && res.status == 1) {
+        onClose();
+        updateRecord();
+      }
+    },
+    onError: (error) => {
+      if (error?.response?.data?.message) {
+        setError(error.response.data.message);
+        setTimeout(() => setError(""), 3000);
+      }
+    }
+  });
+
+  const vatExemptionCodes = ['E1','E2','E3','E4','E5','E6'];
+
   return (
-    <Navigate
-      to="/signin"
-      replace
-      state={{ from: location.pathname }} // 🔥 dynamic route
-    />
+    <Sheet open={isOpen} onOpenChange={handleSheetOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
+        <SheetHeader>
+          <SheetTitle className="text-2xl font-semibold">
+            {isEdit ? t('editProduct') : t('addProduct')}
+          </SheetTitle>
+        </SheetHeader>
+
+        <Formik
+          enableReinitialize
+          initialValues={{
+            product_name: isEdit ? product.ProductName || '' : '',
+            product_price: isEdit ? product.UnitPrice || '' : '',
+            product_vat: isEdit ? product.VATTypeID || '' : 2,
+            product_desc: isEdit ? product.ProductDesc || '' : "",
+            isDisbursement: isEdit ? product.IsDisbursement || false : false,
+            vatExemptionCode: isEdit ? product.VATExemptionCode || null : null,
+          }}
+          validationSchema={Yup.object({
+            product_name: Yup.string().required(t('productNameRequired')),
+            product_price: Yup.number()
+              .typeError(t('productPriceNumber'))
+              .required(t('productPriceRequired'))
+              .min(0, t('productPriceMin')),
+            product_vat: Yup.string().required(t('productVatRequired')),
+          })}
+          onSubmit={(values) => {
+            const payload = {
+              productName: values.product_name,
+              unitPrice: parseFloat(values.product_price),
+              vatType: parseFloat(values.product_vat),
+              productDesc: values.product_desc,
+              isDisbursement: values.isDisbursement,
+              vatExemptionCode: values.vatExemptionCode
+            };
+            if (isEdit) payload.productId = product.ProductID;
+            createProductMutation.mutate(payload);
+          }}
+        >
+          {({ values, handleChange, setFieldValue, resetForm, dirty }) => {
+            dirtyRef.current = dirty;
+
+            return (
+              <Form className="mt-4">
+                <div className='px-3 space-y-4'>
+
+                  <FloatLabelInput
+                    id="product_name"
+                    name="product_name"
+                    label={t('productName')}
+                    value={values.product_name}
+                    onChange={handleChange}
+                    required
+                  />
+                  <ErrorMessage name="product_name" component="div" className="text-red-500 text-xs" />
+
+                  <CurrencyInput
+                    id="product_price"
+                    name="product_price"
+                    label={t('unitPrice')}
+                    value={values.product_price}
+                    onChange={(val) => setFieldValue('product_price', val)}
+                    required
+                  />
+                  <ErrorMessage name="product_price" component="div" className="text-red-500 text-xs" />
+
+                  <FloatLabelSelect
+                    id="product_vat"
+                    name="product_vat"
+                    label={t('vat')}
+                    value={values.product_vat}
+                    onChange={(e) => {
+                      setFieldValue("product_vat", e.target.value);
+                      if (parseFloat(e.target.value) === 1) {
+                        setShowVATExemptionModal(true);
+                      } else {
+                        setFieldValue("vatExemptionCode", null);
+                      }
+                    }}
+                    options={vatList}
+                    labelKey="VATTypeName"
+                    valueKey="VATTypeID"
+                  />
+
+                  <FloatLabelTextarea
+                    id="product_desc"
+                    name="product_desc"
+                    label={t('note')}
+                    value={values.product_desc}
+                    onChange={(e) => setFieldValue("product_desc", e.target.value)}
+                  />
+
+                </div>
+
+                <SheetFooter className="border-0">
+
+                  {error && <Message variant="error" message={error} />}
+
+                  <div className="flex justify-between gap-3">
+
+                    <div className="flex items-center gap-2">
+                      <label>{t('disbursement')}</label>
+                      <Checkbox
+                        checked={values.isDisbursement}
+                        onCheckedChange={(checked) => {
+                          setFieldValue('isDisbursement', checked);
+                          setFieldValue("product_vat", checked ? 1 : 2);
+                        }}
+                      />
+                    </div>
+
+                    <div className='flex gap-2'>
+
+                      {/* ✅ CLOSE BUTTON */}
+                      <Button
+                        type="button"
+                        onClick={() => handleSheetOpenChange(false)}
+                        variant="outline"
+                      >
+                        {t('close')}
+                      </Button>
+
+                      {/* CANCEL */}
+                      {dirty && (
+                        <Button
+                          type="button"
+                          onClick={() => resetForm()}
+                          variant="outline"
+                        >
+                          {t('cancel')}
+                        </Button>
+                      )}
+
+                      <Button
+                        type="submit"
+                        disabled={!dirty}
+                        loading={createProductMutation.isPending}
+                      >
+                        {isEdit ? t('save') : t('addNew')}
+                      </Button>
+
+                    </div>
+                  </div>
+                </SheetFooter>
+
+                {/* VAT MODAL */}
+                <Dialog open={showVATExemptionModal} onOpenChange={setShowVATExemptionModal}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{t('selectVATExemptionCode')}</DialogTitle>
+                    </DialogHeader>
+
+                    {vatExemptionCodes.map(code => (
+                      <button
+                        key={code}
+                        onClick={() => {
+                          setFieldValue("vatExemptionCode", code);
+                          setShowVATExemptionModal(false);
+                        }}
+                        className="w-full p-2 border rounded mb-2"
+                      >
+                        {code}
+                        {values.vatExemptionCode === code && <CircleCheck className="inline ml-2" />}
+                      </button>
+                    ))}
+                  </DialogContent>
+                </Dialog>
+
+              </Form>
+            );
+          }}
+        </Formik>
+      </SheetContent>
+
+      {/* ✅ UNSAVED CHANGES DIALOG */}
+      <Dialog open={showUnsavedWarning} onOpenChange={cancelClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('unsavedChanges')}</DialogTitle>
+          </DialogHeader>
+
+          <p>{t('unsavedChangesMessage')}</p>
+
+          <div className="flex justify-end gap-3 mt-4">
+            <Button onClick={cancelClose} variant="outline">
+              {t('no')}
+            </Button>
+            <Button onClick={confirmClose} variant="destructive">
+              {t('yes')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+    </Sheet>
   );
 }
-```
-
-👉 This automatically works for:
-
-* `/project`
-* `/reports`
-* `/anything`
-  No need to hardcode anything ✅
-
----
-
-## ✅ 2. Login.js (Use dynamic redirect)
-
-### 🔧 Add:
-
-```js
-import { useLocation } from "react-router-dom";
-```
-
-### 🔧 Then:
-
-```js
-const location = useLocation();
-const redirect = location.state?.from || "/invoices";
-```
-
----
-
-### 🔧 Replace:
-
-```js
-navigate(redirect);
-```
-
-### ✅ With:
-
-```js
-navigate(redirect, { replace: true });
-```
-
----
-
-## ✅ 3. Logout (UserProfilePopover.js)
-
-### 🔧 Replace:
-
-```js
-navigate("/signin");
-```
-
-### ✅ With:
-
-```js
-navigate("/signin", { replace: true });
-```
-
-👉 This ensures:
-
-* Old route is NOT remembered
-* No redirect loop
-
----
-
-## ✅ 4. App.jsx (IMPORTANT CLEANUP)
-
-### 🔴 REMOVE this logic:
-
-```js
-const redirect = searchParams.get('redirect')
-```
-
-AND
-
-```js
-navigate(redirect);
-```
-
----
-
-### ✅ Replace logout fallback with:
-
-```js
-navigate("/signin");
-```
-
----
-
-# 🔥 Why this is BEST approach
-
-| Method                       | Problem                    |
-| ---------------------------- | -------------------------- |
-| ❌ Query param (`?redirect=`) | stays in URL → causes bugs |
-| ✅ location.state             | temporary → auto cleared   |
-
-
-
