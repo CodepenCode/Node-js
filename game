@@ -1,0 +1,1357 @@
+tic-tac-toe-multiplayer/
+│
+├── client/                          # React frontend (Vite or CRA)
+│   ├── public/
+│   │   ├── index.html
+│   │   └── favicon.ico
+│   │
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── GameBoard.jsx       # 3x3 Tic Tac Toe board
+│   │   │   ├── MoveButton.jsx      # Single cell button
+│   │   │   ├── GameStatus.jsx      # Winner/draw/turn display
+│   │   │   └── PlayerInfo.jsx      # Player symbols, online status
+│   │   │
+│   │   ├── hooks/
+│   │   │   ├── useAuth.js          # Login/register mutations
+│   │   │   ├── useGameQuery.js     # Game state query
+│   │   │   └── useGameMutation.js  # Make move mutation
+│   │   │
+│   │   ├── pages/
+│   │   │   ├── Login.jsx           # Login form
+│   │   │   ├── Register.jsx        # Register form
+│   │   │   └── GamePage.jsx        # Main multiplayer game
+│   │   │
+│   │   ├── context/
+│   │   │   ├── AuthContext.jsx     # User auth state
+│   │   │   └── SocketContext.jsx   # Socket.IO connection
+│   │   │
+│   │   ├── services/
+│   │   │   ├── api.js              # Axios instance
+│   │   │   └── socket.js           # Socket.IO client setup
+│   │   │
+│   │   ├── utils/
+│   │   │   └── gameLogic.js        # calculateWinner, checkDraw
+│   │   │
+│   │   ├── App.jsx
+│   │   ├── main.jsx
+│   │   └── index.css
+│   │
+│   ├── package.json                # React 18+, @tanstack/react-query, axios, socket.io-client
+│   ├── vite.config.js              # Or react-scripts for CRA
+│   └── tailwind.config.js          # Optional styling
+│
+├── server/                         # Node.js + Express + Socket.IO backend
+│   ├── config/
+│   │   ├── database.js             # Sequelize MySQL connection
+│   │   └── cors.js                 # CORS setup
+│   │
+│   ├── models/
+│   │   ├── index.js                # Sequelize model loader
+│   │   ├── User.js                 # id, username, symbol(X/O), wins, createdAt
+│   │   └── Game.js                 # id, player1Id, player2Id, board(JSON), status, currentTurn
+│   │
+│   ├── routes/
+│   │   ├── auth.js                 # POST /register, /login (JWT)
+│   │   └── games.js                # GET /games, POST /games/join
+│   │
+│   ├── middleware/
+│   │   └── auth.js                 # JWT verification
+│   │
+│   ├── sockets/
+│   │   └── gameHandler.js          # Socket events: joinGame, makeMove, gameOver, reset
+│   │
+│   ├── app.js                      # Express app setup
+│   └── server.js                   # HTTP + Socket.IO server
+│
+├── package.json                    # Root (dev deps if monorepo)
+├── .env.example                    # DB_HOST, JWT_SECRET, PORT=5000
+├── .gitignore
+└── README.md
+
+backend---
+```bash
+cd tic-tac-toe-multiplayer/server
+npm init -y
+npm i express cors helmet morgan dotenv bcryptjs jsonwebtoken socket.io sequelize mysql2
+npm i -D nodemon
+```
+
+**.env.example**
+```
+DB_HOST=localhost
+DB_USER=root
+DB_PASS=yourpassword
+DB_NAME=tic_tac_toe
+JWT_SECRET=supersecretkey_change_this_in_production
+PORT=5000
+CLIENT_URL=http://localhost:3000
+```
+
+**package.json** (server/ - add scripts)
+```json
+{
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  }
+}
+```
+
+**config/database.js**
+```js
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASS,
+  {
+    host: process.env.DB_HOST,
+    dialect: 'mysql',
+    logging: false,
+  }
+);
+
+module.exports = sequelize;
+```
+
+**config/cors.js**
+```js
+const cors = require('cors');
+
+const corsOptions = {
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true,
+};
+
+module.exports = cors(corsOptions);
+```
+
+**models/User.js**
+```js
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
+
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  username: {
+    type: DataTypes.STRING,
+    unique: true,
+    allowNull: false,
+  },
+  passwordHash: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  wins: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  symbol: {
+    type: DataTypes.ENUM('X', 'O'),
+    allowNull: true, // Assigned on first game join
+  },
+}, {
+  tableName: 'users',
+});
+
+module.exports = User;
+```
+
+**models/Game.js**
+```js
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
+const User = require('./User');
+
+const Game = sequelize.define('Game', {
+  id: {
+    type: DataTypes.STRING,
+    primaryKey: true,
+    defaultValue: require('uuid').v4,
+  },
+  player1Id: {
+    type: DataTypes.INTEGER,
+    references: { model: User, key: 'id' },
+  },
+  player2Id: {
+    type: DataTypes.INTEGER,
+    references: { model: User, key: 'id' },
+    allowNull: true,
+  },
+  board: {
+    type: DataTypes.JSON,
+    defaultValue: Array(9).fill(null),
+  },
+  status: {
+    type: DataTypes.ENUM('waiting', 'playing', 'finished'),
+    defaultValue: 'waiting',
+  },
+  currentTurn: {
+    type: DataTypes.ENUM('X', 'O'),
+    defaultValue: 'X',
+  },
+  winner: {
+    type: DataTypes.ENUM('X', 'O', null),
+    defaultValue: null,
+  },
+});
+
+Game.belongsTo(User, { as: 'player1' });
+Game.belongsTo(User, { as: 'player2' });
+
+module.exports = Game;
+```
+
+**models/index.js**
+```js
+const sequelize = require('../config/database');
+const User = require('./User');
+const Game = require('./Game');
+
+User.hasMany(Game, { as: 'gamesAsPlayer1', foreignKey: 'player1Id' });
+User.hasMany(Game, { as: 'gamesAsPlayer2', foreignKey: 'player2Id' });
+
+const models = { User, Game };
+Object.values(models).forEach(model => {
+  if (model.associate) model.associate(models);
+});
+
+module.exports = { sequelize, ...models };
+```
+
+**middleware/auth.js**
+```js
+const jwt = require('jsonwebtoken');
+
+module.exports = (req, res, next) => {
+  const token = req.header('Authorization')?.replace('Bearer ', '');
+  
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
+```
+
+**routes/auth.js**
+```js
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
+const auth = require('../middleware/auth');
+
+const router = express.Router();
+
+router.post('/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    const existingUser = await User.findOne({ where: { username } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username taken' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await User.create({ username, passwordHash });
+    
+    const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    
+    res.json({ token, user: { id: user.id, username: user.username } });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    const user = await User.findOne({ where: { username } });
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    
+    res.json({ token, user: { id: user.id, username: user.username, wins: user.wins } });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/me', auth, async (req, res) => {
+  const user = await User.findByPk(req.user.id, {
+    attributes: ['id', 'username', 'wins', 'symbol'],
+  });
+  res.json(user);
+});
+
+module.exports = router;
+```
+
+**routes/games.js**
+```js
+const express = require('express');
+const { Op } = require('sequelize');
+const { Game, User } = require('../models');
+const auth = require('../middleware/auth');
+
+const router = express.Router();
+
+router.get('/', auth, async (req, res) => {
+  const games = await Game.findAll({
+    where: {
+      [Op.or]: [
+        { player1Id: req.user.id },
+        { player2Id: req.user.id },
+      ],
+    },
+    include: [
+      { model: User, as: 'player1' },
+      { model: User, as: 'player2' },
+    ],
+    order: [['updatedAt', 'DESC']],
+  });
+  res.json(games);
+});
+
+router.post('/open', auth, async (req, res) => {
+  const game = await Game.create({
+    player1Id: req.user.id,
+  });
+  res.json(game);
+});
+
+router.post('/join/:gameId', auth, async (req, res) => {
+  const game = await Game.findByPk(req.params.gameId);
+  if (!game || game.status !== 'waiting') {
+    return res.status(400).json({ error: 'Game not available' });
+  }
+
+  game.player2Id = req.user.id;
+  game.status = 'playing';
+  await game.save();
+
+  // Assign symbols
+  game.player1.symbol = 'X';
+  game.player2.symbol = 'O';
+  await Promise.all([game.player1.save(), game.player2.save()]);
+
+  res.json(game);
+});
+
+module.exports = router;
+```
+
+**sockets/gameHandler.js**
+```js
+const { Game, User } = require('../models');
+const { calculateWinner } = require('../utils/gameLogic'); // You'll implement this
+
+module.exports = (io) => {
+  io.on('connection', (socket) => {
+    console.log('User connected:', socket.id);
+
+    socket.on('joinGame', async ({ gameId, userId }) => {
+      socket.join(gameId);
+      socket.to(gameId).emit('playerJoined', { userId });
+    });
+
+    socket.on('makeMove', async ({ gameId, index }) => {
+      const game = await Game.findByPk(gameId, {
+        include: [{ model: User, as: 'player1' }, { model: User, as: 'player2' }],
+      });
+
+      if (!game || game.status !== 'playing') return;
+
+      const board = [...game.board];
+      if (board[index] || board[index] !== null) return; // Invalid move
+
+      // Determine player symbol from currentTurn
+      board[index] = game.currentTurn;
+
+      const winner = calculateWinner(board);
+      let gameOver = false;
+
+      if (winner) {
+        game.winner = winner;
+        game.status = 'finished';
+        // Increment winner's wins
+        const winningPlayer = game.currentTurn === 'X' ? game.player1 : game.player2;
+        winningPlayer.wins += 1;
+        await winningPlayer.save();
+        gameOver = true;
+      } else if (!board.includes(null)) {
+        game.status = 'finished'; // Draw
+        gameOver = true;
+      } else {
+        game.currentTurn = game.currentTurn === 'X' ? 'O' : 'X';
+      }
+
+      game.board = board;
+      await game.save();
+
+      io.to(gameId).emit('moveMade', {
+        board,
+        currentTurn: game.currentTurn,
+        winner,
+        status: game.status,
+      });
+    });
+
+    socket.on('resetGame', async ({ gameId }) => {
+      const game = await Game.findByPk(gameId);
+      game.board = Array(9).fill(null);
+      game.status = 'playing';
+      game.currentTurn = 'X';
+      game.winner = null;
+      await game.save();
+
+      io.to(gameId).emit('gameReset', { board: game.board, currentTurn: 'X' });
+    });
+
+    socket.on('disconnect', () => {
+      console.log('User disconnected:', socket.id);
+    });
+  });
+};
+```
+
+**utils/gameLogic.js** (create this helper)
+```js
+const lines = [
+  [0,1,2], [3,4,5], [6,7,8],
+  [0,3,6], [1,4,7], [2,5,8],
+  [0,4,8], [2,4,6],
+];
+
+function calculateWinner(board) {
+  for (let i = 0; i < lines.length; i++) {
+    const [a,b,c] = lines[i];
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return board[a];
+    }
+  }
+  return null;
+}
+
+module.exports = { calculateWinner };
+```
+
+**app.js**
+```js
+const express = require('express');
+const cors = require('./config/cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const authRoutes = require('./routes/auth');
+const gameRoutes = require('./routes/games');
+
+const app = express();
+
+app.use(helmet());
+app.use(morgan('combined'));
+app.use(cors());
+app.use(express.json());
+
+app.use('/api/auth', authRoutes);
+app.use('/api/games', gameRoutes);
+
+module.exports = app;
+```
+
+**server.js**
+```js
+require('dotenv').config();
+const http = require('http');
+const { sequelize } = require('./models');
+const app = require('./app');
+const { Server } = require('socket.io');
+const gameHandler = require('./sockets/gameHandler');
+
+const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+  },
+});
+
+gameHandler(io);
+
+sequelize.sync({ alter: true }).then(() => {
+  console.log('✅ Database synced');
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+});
+```
+
+## Quick Start
+
+1. Copy `.env.example` → `.env`, update DB creds
+2. `cd server && npm run dev`
+3. Test auth: `POST /api/auth/register {username:"player1", password:"123"}`
+4. Create game: `POST /api/games/open` (auth header)
+5. Socket events work on connection!
+
+Backend handles realtime moves with server-side validation, persists games/wins. Ready for React + Socket.IO client integration. [geeksforgeeks](https://www.geeksforgeeks.org/mern/multiplayer-tic-tac-toe-game-using-react-node/)
+
+frontend------------
+```bash
+cd tic-tac-toe-multiplayer/client
+npm create vite@latest . -- --template react
+npm i @tanstack/react-query axios socket.io-client react-router-dom lucide-react
+npm i -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+```
+
+**package.json** (key deps)
+```json
+{
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.1",
+    "@tanstack/react-query": "^5.59.15",
+    "axios": "^1.7.7",
+    "socket.io-client": "^4.8.0",
+    "lucide-react": "^0.441.0"
+  }
+}
+```
+
+**tailwind.config.js**
+```js
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: { extend: {} },
+  plugins: [],
+};
+```
+
+**vite.config.js**
+```js
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:5000',
+      '/socket.io': {
+        target: 'http://localhost:5000',
+        ws: true,
+      },
+    },
+  },
+});
+```
+
+**public/index.html** (add title)
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tic Tac Toe Multiplayer</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
+```
+
+**src/index.css**
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { 
+  @apply bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen;
+}
+```
+
+**src/main.jsx**
+```jsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter } from 'react-router-dom';
+import './index.css';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
+});
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </React.StrictMode>,
+);
+```
+
+**src/services/api.js**
+```js
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: '/api',
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export const authAPI = {
+  register: (data) => api.post('/auth/register', data),
+  login: (data) => api.post('/auth/login', data),
+  me: () => api.get('/auth/me'),
+};
+
+export const gamesAPI = {
+  list: () => api.get('/games'),
+  create: () => api.post('/games/open'),
+  join: (gameId) => api.post(`/games/join/${gameId}`),
+};
+
+export default api;
+```
+
+**src/services/socket.js**
+```js
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:5000');
+
+export default socket;
+```
+
+**src/utils/gameLogic.js**
+```js
+export function calculateWinner(board) {
+  const lines = [
+    [0,1,2], [3,4,5], [6,7,8],
+    [0,3,6], [1,4,7], [2,5,8],
+    [0,4,8], [2,4,6],
+  ];
+  for (let i = 0; i < lines.length; i++) {
+    const [a,b,c] = lines[i];
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return board[a];
+    }
+  }
+  return null;
+}
+
+export function isBoardFull(board) {
+  return board.every(cell => cell !== null);
+}
+```
+
+**src/context/AuthContext.jsx**
+```jsx
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { authAPI } from '../services/api';
+
+const AuthContext = createContext();
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
+};
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      authAPI.me()
+        .then(({ data }) => setUser(data))
+        .catch(() => localStorage.removeItem('token'))
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const login = async (credentials) => {
+    const { data } = await authAPI.login(credentials);
+    localStorage.setItem('token', data.token);
+    setUser(data.user);
+    return data;
+  };
+
+  const register = async (credentials) => {
+    const { data } = await authAPI.register(credentials);
+    localStorage.setItem('token', data.token);
+    setUser(data.user);
+    return data;
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+```
+
+**src/context/SocketContext.jsx**
+```jsx
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import socket from '../services/socket';
+import { useAuth } from './AuthContext';
+
+const SocketContext = createContext();
+
+export const useSocket = () => useContext(SocketContext);
+
+export const SocketProvider = ({ children }) => {
+  const { user } = useAuth();
+  const [socketConnected, setSocketConnected] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      socket.connect();
+      socket.on('connect', () => setSocketConnected(true));
+      socket.on('disconnect', () => setSocketConnected(false));
+    } else {
+      socket.disconnect();
+    }
+
+    return () => {
+      socket.off('connect');
+      socket.off('disconnect');
+    };
+  }, [user]);
+
+  return (
+    <SocketContext.Provider value={{ socket, socketConnected }}>
+      {children}
+    </SocketContext.Provider>
+  );
+};
+```
+
+**src/hooks/useAuth.js**
+```jsx
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
+
+export const useLoginMutation = () => {
+  const { login } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: login,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+    },
+  });
+};
+
+export const useRegisterMutation = () => {
+  const { register } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: register,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+    },
+  });
+};
+```
+
+**src/hooks/useGameQuery.js**
+```jsx
+import { useQuery } from '@tanstack/react-query';
+import { gamesAPI } from '../services/api';
+
+export const useGamesQuery = () => {
+  return useQuery({
+    queryKey: ['games'],
+    queryFn: gamesAPI.list,
+  });
+};
+```
+
+**src/hooks/useGameMutation.js**
+```jsx
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { gamesAPI } from '../services/api';
+import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
+
+export const useCreateGameMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: gamesAPI.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['games'] });
+    },
+  });
+};
+
+export const useJoinGameMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ gameId }) => gamesAPI.join(gameId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['games'] });
+    },
+  });
+};
+```
+
+**src/components/MoveButton.jsx**
+```jsx
+import { Square } from 'lucide-react';
+
+const MoveButton = ({ value, onClick, disabled }) => (
+  <button
+    className={`
+      w-24 h-24 border-4 border-gray-300 rounded-lg font-bold text-4xl
+      flex items-center justify-center transition-all duration-200 hover:scale-105
+      ${value === 'X' ? 'text-blue-600 border-blue-400' : 'text-pink-600 border-pink-400'}
+      ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:shadow-lg shadow-md'}
+    `}
+    onClick={onClick}
+    disabled={disabled}
+  >
+    {value || <Square className="w-12 h-12 text-gray-400" />}
+  </button>
+);
+
+export default MoveButton;
+```
+
+**src/components/GameBoard.jsx**
+```jsx
+import MoveButton from './MoveButton';
+import { useGameMutation } from '../hooks/useGameMutation';
+import { useSocket } from '../context/SocketContext';
+
+const GameBoard = ({ board, gameId, currentTurn, status, mySymbol, isMyTurn }) => {
+  const { socket } = useSocket();
+  const makeMoveMutation = useGameMutation(); // Optimistic, but socket handles real move
+
+  const handleMove = (index) => {
+    if (!isMyTurn || status !== 'playing') return;
+    socket.emit('makeMove', { gameId, index });
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-2 p-8 bg-white rounded-2xl shadow-2xl">
+      {board.map((value, index) => (
+        <MoveButton
+          key={index}
+          value={value}
+          onClick={() => handleMove(index)}
+          disabled={!isMyTurn || status !== 'playing'}
+        />
+      ))}
+    </div>
+  );
+};
+
+export default GameBoard;
+```
+
+**src/components/GameStatus.jsx**
+```jsx
+import { Crown, Loader2 } from 'lucide-react';
+
+const GameStatus = ({ status, winner, currentTurn, mySymbol }) => {
+  if (status === 'waiting') {
+    return (
+      <div className="text-center p-8">
+        <Loader2 className="w-16 h-16 animate-spin mx-auto mb-4 text-blue-500" />
+        <p className="text-xl font-semibold text-gray-600">Waiting for opponent...</p>
+      </div>
+    );
+  }
+
+  if (status === 'finished') {
+    if (winner) {
+      return (
+        <div className="text-center p-8">
+          <Crown className="w-20 h-20 mx-auto mb-4 text-yellow-500" />
+          <h2 className="text-3xl font-bold mb-2">
+            {winner === mySymbol ? 'You Win!' : 'Opponent Wins!'}
+          </h2>
+          <p className="text-xl text-gray-600">Game Over</p>
+        </div>
+      );
+    }
+    return (
+      <div className="text-center p-8">
+        <h2 className="text-3xl font-bold mb-2 text-gray-600">It&apos;s a Draw!</h2>
+        <p className="text-xl text-gray-500">Good game!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-center p-8">
+      <p className="text-2xl font-bold mb-2">
+        {currentTurn === mySymbol ? 'Your Turn' : "Opponent&apos;s Turn"}
+      </p>
+      <p className="text-xl text-gray-500">Current: {currentTurn}</p>
+    </div>
+  );
+};
+
+export default GameStatus;
+```
+
+**src/components/PlayerInfo.jsx**
+```jsx
+const PlayerInfo = ({ player1, player2, myId, currentTurn }) => (
+  <div className="grid grid-cols-2 gap-8 p-6 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl">
+    <div className={`p-4 rounded-xl transition-all ${
+      player1.id === myId ? 'bg-blue-100 border-4 border-blue-400' : 'bg-gray-100'
+    }`}>
+      <h3 className="font-bold text-lg mb-2">{player1.username}</h3>
+      <div className="text-3xl font-black mb-1">{player1.symbol || '?'}</div>
+      <span className="text-sm text-gray-600">Wins: {player1.wins}</span>
+    </div>
+    
+    <div className={`p-4 rounded-xl transition-all ${
+      player2?.id === myId ? 'bg-blue-100 border-4 border-blue-400' : 'bg-gray-100'
+    }`}>
+      <h3 className="font-bold text-lg mb-2">{player2?.username || 'Waiting...'}</h3>
+      <div className="text-3xl font-black mb-1">{player2?.symbol || '?'}</div>
+      <span className="text-sm text-gray-600">Wins: {player2?.wins || 0}</span>
+    </div>
+  </div>
+);
+
+export default PlayerInfo;
+```
+
+**src/pages/Login.jsx**
+```jsx
+import { useState } from 'react';
+import { useLoginMutation } from '../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import { Mail, Lock } from 'lucide-react';
+
+const Login = () => {
+  const [formData, setFormData] = useState({ username: '', password: '' });
+  const loginMutation = useLoginMutation();
+  const navigate = useNavigate();
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    loginMutation.mutate(formData, {
+      onSuccess: () => navigate('/game'),
+    });
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-8">
+      <div className="max-w-md w-full bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl p-12">
+        <h1 className="text-4xl font-bold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          Tic Tac Toe
+        </h1>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium mb-2">Username</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all"
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all"
+                required
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={loginMutation.isPending}
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loginMutation.isPending ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
+        <p className="mt-6 text-center text-sm text-gray-600">
+          No account? <a href="/register" className="text-blue-600 hover:underline font-medium">Register</a>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default Login;
+```
+
+**src/pages/Register.jsx**
+```jsx
+import { useState } from 'react';
+import { useRegisterMutation } from '../hooks/useAuth';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { UserPlus } from 'lucide-react';
+
+const Register = () => {
+  const [formData, setFormData] = useState({ username: '', password: '' });
+  const registerMutation = useRegisterMutation();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    registerMutation.mutate(formData, {
+      onSuccess: () => navigate('/game', { replace: true }),
+    });
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-8">
+      <div className="max-w-md w-full bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl p-12">
+        <div className="text-center mb-8">
+          <UserPlus className="w-20 h-20 mx-auto mb-4 text-green-500" />
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
+            Join Game
+          </h1>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Same form fields as Login */}
+          <div>
+            <label className="block text-sm font-medium mb-2">Username</label>
+            <input
+              type="text"
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-4 focus:ring-green-200 focus:border-green-500 transition-all"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Password</label>
+            <input
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-4 focus:ring-green-200 focus:border-green-500 transition-all"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={registerMutation.isPending}
+            className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white py-3 px-6 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200"
+          >
+            {registerMutation.isPending ? 'Creating...' : 'Register'}
+          </button>
+        </form>
+        <p className="mt-6 text-center text-sm text-gray-600">
+          Have account? <a href="/login" className="text-blue-600 hover:underline font-medium">Login</a>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default Register;
+```
+
+**src/pages/GamePage.jsx**
+```jsx
+import { useEffect, useState } from 'react';
+import { useGamesQuery, useCreateGameMutation, useJoinGameMutation } from '../hooks/useGameQuery';
+import { useAuth, useSocket } from '../context';
+import GameBoard from '../components/GameBoard';
+import GameStatus from '../components/GameStatus';
+import PlayerInfo from '../components/PlayerInfo';
+import { RefreshCw, UserPlus } from 'lucide-react';
+
+const GamePage = () => {
+  const { user } = useAuth();
+  const { socket, socketConnected } = useSocket();
+  const { data: games = [], isLoading } = useGamesQuery();
+  const createMutation = useCreateGameMutation();
+  const joinMutation = useJoinGameMutation();
+  
+  const [currentGame, setCurrentGame] = useState(null);
+  const [gameState, setGameState] = useState({ board: Array(9).fill(null), currentTurn: 'X', status: 'waiting' });
+
+  useEffect(() => {
+    if (!socketConnected || !user) return;
+
+    const handleMoveMade = ({ board, currentTurn, winner, status }) => {
+      setGameState({ board, currentTurn, winner, status });
+    };
+
+    const handlePlayerJoined = () => {
+      // Refresh current game
+      if (currentGame) setCurrentGame({ ...currentGame, status: 'playing' });
+    };
+
+    const handleGameReset = ({ board, currentTurn }) => {
+      setGameState({ board, currentTurn, status: 'playing', winner: null });
+    };
+
+    socket.on('moveMade', handleMoveMade);
+    socket.on('playerJoined', handlePlayerJoined);
+    socket.on('gameReset', handleGameReset);
+
+    return () => {
+      socket.off('moveMade', handleMoveMade);
+      socket.off('playerJoined', handlePlayerJoined);
+      socket.off('gameReset', handleGameReset);
+    };
+  }, [socket, socketConnected, user, currentGame]);
+
+  const handleCreateGame = () => {
+    createMutation.mutate(undefined, {
+      onSuccess: (game) => {
+        setCurrentGame(game);
+        socket.emit('joinGame', { gameId: game.id, userId: user.id });
+        setGameState({ board: game.board, currentTurn: game.currentTurn, status: game.status });
+      },
+    });
+  };
+
+  const handleJoinGame = (gameId) => {
+    joinMutation.mutate({ gameId }, {
+      onSuccess: (game) => {
+        setCurrentGame(game);
+        socket.emit('joinGame', { gameId: game.id, userId: user.id });
+        setGameState({ board: game.board, currentTurn: game.currentTurn, status: game.status });
+      },
+    });
+  };
+
+  const handleReset = () => {
+    if (currentGame) {
+      socket.emit('resetGame', { gameId: currentGame.id });
+    }
+  };
+
+  const waitingGames = games.filter(g => g.status === 'waiting' && g.player1Id !== user.id);
+
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><div>Loading...</div></div>;
+  }
+
+  return (
+    <div className="min-h-screen p-8 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center mb-12">
+        <h1 className="text-5xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+          Tic Tac Toe
+        </h1>
+        <div className="flex items-center gap-4 text-sm">
+          <span className={`px-3 py-1 rounded-full font-bold ${
+            socketConnected ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+          }`}>
+            {socketConnected ? 'Online' : 'Offline'}
+          </span>
+          <span>{user.username} ({user.symbol || '?'})</span>
+        </div>
+      </div>
+
+      {currentGame ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center max-w-4xl mx-auto">
+          {/* Game Board */}
+          <div className="space-y-8">
+            <GameBoard
+              board={gameState.board}
+              gameId={currentGame.id}
+              currentTurn={gameState.currentTurn}
+              status={gameState.status}
+              mySymbol={user.symbol}
+              isMyTurn={gameState.currentTurn === user.symbol && gameState.status === 'playing'}
+            />
+            <GameStatus
+              status={gameState.status}
+              winner={gameState.winner}
+              currentTurn={gameState.currentTurn}
+              mySymbol={user.symbol}
+            />
+          </div>
+
+          {/* Player Info & Controls */}
+          <div className="space-y-8">
+            <PlayerInfo
+              player1={currentGame.player1}
+              player2={currentGame.player2}
+              myId={user.id}
+              currentTurn={gameState.currentTurn}
+            />
+            <div className="space-y-4">
+              <button
+                onClick={handleReset}
+                disabled={gameState.status !== 'finished'}
+                className="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white py-4 px-8 rounded-2xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all disabled:opacity-50"
+              >
+                <RefreshCw className="w-6 h-6 inline mr-2" />
+                New Game
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">
+            Choose a Game
+          </h2>
+          
+          {/* Create New Game */}
+          <div className="bg-white/70 backdrop-blur-xl rounded-3xl p-12 shadow-2xl mb-8 text-center">
+            <button
+              onClick={handleCreateGame}
+              disabled={createMutation.isPending}
+              className="bg-gradient-to-r from-blue-500 to-purple-500 text-white py-8 px-12 rounded-2xl font-bold text-2xl shadow-2xl hover:shadow-3xl transform hover:-translate-y-2 transition-all w-full max-w-md mx-auto disabled:opacity-50"
+            >
+              <UserPlus className="w-12 h-12 inline mr-4 mb-4 block" />
+              Create New Game
+            </button>
+          </div>
+
+          {/* Join Existing Games */}
+          {waitingGames.length > 0 ? (
+            <div className="bg-white/70 backdrop-blur-xl rounded-3xl p-8 shadow-2xl">
+              <h3 className="text-2xl font-bold mb-6 text-center">Join Open Games</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                {waitingGames.map((game) => (
+                  <div key={game.id} className="p-6 border-2 border-dashed border-blue-300 rounded-xl hover:border-blue-400 transition-all bg-blue-50">
+                    <p className="font-bold text-lg mb-2">{game.player1.username} (X)</p>
+                    <p className="text-sm text-gray-600 mb-4">Waiting for O player...</p>
+                    <button
+                      onClick={() => handleJoinGame(game.id)}
+                      disabled={joinMutation.isPending}
+                      className="w-full bg-blue-600 text-white py-3 px-6 rounded-xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50"
+                    >
+                      Join Game
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 text-lg py-12">
+              No open games. Create one to get started!
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default GamePage;
+```
+
+**src/App.jsx**
+```jsx
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import GamePage from './pages/GamePage';
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  return user ? children : <Navigate to="/login" replace />;
+}
+
+function AppContent() {
+  const location = useLocation();
+  
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route
+        path="/game"
+        element={
+          <ProtectedRoute>
+            <GamePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/" element={<Navigate to="/game" replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <SocketProvider>
+        <AppContent />
+      </SocketProvider>
+    </AuthProvider>
+  );
+}
+
+export default App;
+```
+
+## Run Frontend
+
+```bash
+cd client
+npm run dev
+```
+
+**Flow**: Register/Login → Create/Join game → Realtime moves via Socket.IO → Mutations optimistic + server validation → Win tracking in MySQL. Tailwind-styled, mobile-responsive. Connects perfectly to your backend! [geeksforgeeks](https://www.geeksforgeeks.org/mern/multiplayer-tic-tac-toe-game-using-react-node/)
