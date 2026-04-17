@@ -1,0 +1,3180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Wander</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent
+    }
+
+    :root {
+      --navy: #0A1628;
+      --gold: #C8963E;
+      --gold-light: #E8B86D;
+      --frosted: rgba(255, 255, 255, 0.08);
+      --frosted-mid: rgba(255, 255, 255, 0.12);
+      --frosted-high: rgba(255, 255, 255, 0.18);
+      --border: rgba(255, 255, 255, 0.15);
+      --white: #FFFFFF;
+      --muted: rgba(255, 255, 255, 0.6);
+      --muted-low: rgba(255, 255, 255, 0.35);
+      --success: #2ECC71;
+      --danger: #E74C3C;
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      --shadow-deep: 0 16px 48px rgba(0, 0, 0, 0.5);
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--navy);
+      color: var(--white);
+      min-height: 100vh;
+      overflow-x: hidden
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-family: 'Playfair Display', serif
+    }
+
+    /* Layout */
+    #app {
+      max-width: 430px;
+      margin: 0 auto;
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden
+    }
+
+    .screen {
+      display: none;
+      padding-bottom: 80px;
+      min-height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden
+    }
+
+    .screen.active {
+      display: block
+    }
+
+    /* Bottom Nav */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 430px;
+      height: 64px;
+      background: rgba(10, 22, 40, 0.95);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      z-index: 1000
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      padding: 8px 16px;
+      border-radius: 12px;
+      transition: all 0.3s;
+      opacity: 0.5
+    }
+
+    .nav-item.active {
+      opacity: 1
+    }
+
+    .nav-item.active .nav-icon {
+      color: var(--gold)
+    }
+
+    .nav-item.active .nav-label {
+      color: var(--gold)
+    }
+
+    .nav-icon {
+      font-size: 22px;
+      transition: transform 0.3s
+    }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--muted)
+    }
+
+    .nav-item:hover .nav-icon {
+      transform: translateY(-2px)
+    }
+
+    /* Glass card mixin */
+    .glass {
+      background: var(--frosted);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow)
+    }
+
+    .glass-high {
+      background: var(--frosted-high);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 20px;
+      box-shadow: var(--shadow-deep)
+    }
+
+    /* ====== SCREEN 1: HOME ====== */
+    #screen-home {
+      background: var(--navy)
+    }
+
+    .home-header {
+      padding: 52px 16px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .home-greeting {
+      font-size: 14px;
+      color: var(--muted)
+    }
+
+    .home-title {
+      font-size: 26px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif
+    }
+
+    .avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), var(--gold-light));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--navy);
+      box-shadow: 0 4px 12px rgba(200, 150, 62, 0.4)
+    }
+
+    .hero-card {
+      width: 100%;
+      height: 340px;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer
+    }
+
+    .hero-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.5s
+    }
+
+    .hero-card:hover .hero-img {
+      transform: scale(1.03)
+    }
+
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(10, 22, 40, 0.95) 0%, rgba(10, 22, 40, 0.4) 50%, transparent 100%)
+    }
+
+    .hero-glass {
+      position: absolute;
+      bottom: 20px;
+      left: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: var(--shadow)
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: var(--gold);
+      color: var(--navy);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 8px;
+      text-transform: uppercase
+    }
+
+    .hero-dest {
+      font-size: 24px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif;
+      margin-bottom: 4px
+    }
+
+    .hero-dates {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 12px
+    }
+
+    .hero-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .countdown-pill {
+      background: rgba(200, 150, 62, 0.2);
+      border: 1px solid rgba(200, 150, 62, 0.5);
+      border-radius: 20px;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .countdown-num {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--gold);
+      font-family: 'Playfair Display', serif
+    }
+
+    .countdown-label {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.3
+    }
+
+    .travelers-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      color: var(--muted)
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 16px 12px
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif
+    }
+
+    .see-all {
+      font-size: 13px;
+      color: var(--gold);
+      cursor: pointer;
+      font-weight: 500
+    }
+
+    .dest-scroll {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 0 16px 16px;
+      scrollbar-width: none
+    }
+
+    .dest-scroll::-webkit-scrollbar {
+      display: none
+    }
+
+    .dest-card {
+      flex: 0 0 160px;
+      height: 210px;
+      border-radius: 18px;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: transform 0.3s
+    }
+
+    .dest-card:hover {
+      transform: scale(1.02)
+    }
+
+    .dest-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover
+    }
+
+    .dest-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(10, 22, 40, 0.85) 0%, transparent 60%)
+    }
+
+    .dest-info {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      right: 12px
+    }
+
+    .dest-name {
+      font-size: 15px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif
+    }
+
+    .dest-country {
+      font-size: 11px;
+      color: var(--muted)
+    }
+
+    .dest-tag {
+      display: inline-block;
+      background: rgba(200, 150, 62, 0.3);
+      border: 1px solid rgba(200, 150, 62, 0.5);
+      border-radius: 8px;
+      font-size: 10px;
+      color: var(--gold);
+      padding: 2px 7px;
+      margin-top: 4px
+    }
+
+    .quick-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 0 16px 24px
+    }
+
+    .stat-card {
+      padding: 16px;
+      cursor: pointer;
+      transition: transform 0.2s
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px)
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      margin-bottom: 8px
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--gold)
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    /* ====== SCREEN 2: TRIPS ====== */
+    #screen-trips {
+      padding-top: 52px
+    }
+
+    .trips-header {
+      padding: 10px 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .trips-title {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif;
+      line-height: 1;
+      /* 🔥 important */
+      display: flex;
+      align-items: center;
+    }
+
+    .new-trip-btn {
+      background: var(--gold);
+      color: var(--navy);
+      border: none;
+      padding: 10px 18px;
+      border-radius: 25px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.3s;
+      box-shadow: 0 4px 16px rgba(200, 150, 62, 0.4);
+      font-family: 'DM Sans', sans-serif
+    }
+
+    .new-trip-btn:hover {
+      background: var(--gold-light);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(200, 150, 62, 0.5)
+    }
+
+    .left-header .back-btn {
+      width: 38px;
+      height: 38px;
+      background: none;
+      border: none;
+      font-size: 26px;
+    }
+
+    .left-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .trip-card {
+      margin: 0 16px 16px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.3s
+    }
+
+    .trip-card:hover {
+      transform: translateY(-3px)
+    }
+
+    .trip-card-img {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      display: block
+    }
+
+    .trip-card-body {
+      padding: 16px;
+      background: var(--frosted);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: none
+    }
+
+    .trip-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px
+    }
+
+    .trip-name {
+      font-size: 18px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif
+    }
+
+    .trip-style-tag {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px
+    }
+
+    .tag-adventure {
+      background: rgba(231, 76, 60, 0.2);
+      color: #E74C3C;
+      border: 1px solid rgba(231, 76, 60, 0.4)
+    }
+
+    .tag-luxury {
+      background: rgba(200, 150, 62, 0.2);
+      color: var(--gold);
+      border: 1px solid rgba(200, 150, 62, 0.4)
+    }
+
+    .tag-beach {
+      background: rgba(52, 152, 219, 0.2);
+      color: #5DADE2;
+      border: 1px solid rgba(52, 152, 219, 0.4)
+    }
+
+    .tag-cultural {
+      background: rgba(155, 89, 182, 0.2);
+      color: #BB8FCE;
+      border: 1px solid rgba(155, 89, 182, 0.4)
+    }
+
+    .trip-dates {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px
+    }
+
+    .trip-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    /* Bottom Sheet */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      backdrop-filter: blur(4px)
+    }
+
+    .overlay.visible {
+      opacity: 1;
+      pointer-events: all
+    }
+
+    .bottom-sheet {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%) translateY(100%);
+      width: 100%;
+      max-width: 430px;
+      background: linear-gradient(180deg, rgba(15, 30, 55, 0.98), rgba(10, 22, 40, 0.99));
+      backdrop-filter: blur(20px);
+      border-radius: 24px 24px 0 0;
+      border-top: 1px solid var(--border);
+      padding: 0 16px 40px;
+      z-index: 1200;
+      transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1)
+    }
+
+    .bottom-sheet.visible {
+      transform: translateX(-50%) translateY(0)
+    }
+
+    .sheet-handle {
+      width: 36px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin: 12px auto 20px
+    }
+
+    .sheet-title {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif;
+      margin-bottom: 20px
+    }
+
+    .form-group {
+      margin-bottom: 16px
+    }
+
+    .form-label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: block
+    }
+
+    .form-input {
+      width: 100%;
+      background: var(--frosted-mid);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: var(--white);
+      font-size: 14px;
+      font-family: 'DM Sans', sans-serif;
+      outline: none;
+      transition: border-color 0.3s
+    }
+
+    .form-input:focus {
+      border-color: var(--gold)
+    }
+
+    .form-input::placeholder {
+      color: var(--muted-low)
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px
+    }
+
+    .travelers-counter {
+      display: flex;
+      align-items: center;
+      gap: 12px
+    }
+
+    .counter-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--frosted-mid);
+      border: 1px solid var(--border);
+      color: var(--white);
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s
+    }
+
+    .counter-btn:hover {
+      background: var(--gold);
+      color: var(--navy);
+      border-color: var(--gold)
+    }
+
+    .counter-val {
+      font-size: 18px;
+      font-weight: 700;
+      min-width: 30px;
+      text-align: center
+    }
+
+    .chip-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap
+    }
+
+    .chip {
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--frosted);
+      transition: all 0.2s;
+      color: var(--muted)
+    }
+
+    .chip.selected {
+      background: rgba(200, 150, 62, 0.25);
+      border-color: var(--gold);
+      color: var(--gold);
+      font-weight: 600
+    }
+
+    .submit-btn {
+      width: 100%;
+      background: var(--gold);
+      color: var(--navy);
+      border: none;
+      padding: 16px;
+      border-radius: 16px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      /* margin-top: 24px; */
+      font-family: 'DM Sans', sans-serif;
+      transition: all 0.3s;
+      box-shadow: 0 4px 20px rgba(200, 150, 62, 0.4)
+    }
+
+    .submit-btn:hover {
+      background: var(--gold-light);
+      transform: translateY(-1px)
+    }
+
+    /* ====== SCREEN 3: ITINERARY ====== */
+    #screen-itinerary {
+      padding-top: 16px;
+    }
+
+    .itin-cover {
+      position: relative;
+      margin: 0 16px 16px 16px;
+      /* left right spacing */
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .itin-cover .back-btn {
+      position: absolute;
+      top: 12px;
+      left: 16px;
+    }
+
+    .itin-cover-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover
+    }
+
+    .itin-cover-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(10, 22, 40, 1) 0%, rgba(10, 22, 40, 0.5) 50%, rgba(10, 22, 40, 0.2) 100%)
+    }
+
+    .back-btn {
+      width: 38px;
+      height: 38px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: all 0.2s;
+      z-index: 10;
+    }
+
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.25)
+    }
+
+    .itin-cover-info {
+      position: absolute;
+      bottom: 20px;
+      left: 16px;
+      right: 16px
+    }
+
+    .itin-cover-glass {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 16px;
+      padding: 16px
+    }
+
+    .itin-cover-name {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif
+    }
+
+    .itin-cover-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px
+    }
+
+    .view-toggle {
+      display: flex;
+      margin: 16px;
+      background: var(--frosted);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 4px;
+      gap: 4px
+    }
+
+    .toggle-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 9px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-family: 'DM Sans', sans-serif
+    }
+
+    .toggle-btn.active {
+      background: var(--gold);
+      color: var(--navy);
+      box-shadow: 0 2px 8px rgba(200, 150, 62, 0.4)
+    }
+
+    .accordion-day {
+      margin: 0 16px 12px
+    }
+
+    .day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      cursor: pointer;
+      border-radius: 16px;
+      background: var(--frosted-mid);
+      border: 1px solid var(--border);
+      transition: all 0.3s
+    }
+
+    .day-header:hover {
+      background: var(--frosted-high)
+    }
+
+    .day-header.open {
+      border-radius: 16px 16px 0 0;
+      border-bottom-color: transparent
+    }
+
+    .day-title-text {
+      font-size: 15px;
+      font-weight: 700
+    }
+
+    .day-subtitle {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .day-arrow {
+      font-size: 12px;
+      color: var(--muted);
+      transition: transform 0.3s
+    }
+
+    .day-arrow.open {
+      transform: rotate(180deg)
+    }
+
+    .day-body {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.4s ease
+    }
+
+    .day-body.open {
+      max-height: 800px
+    }
+
+    .day-body-inner {
+      background: var(--frosted);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 16px 16px;
+      padding: 12px
+    }
+
+    .activity-card {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s
+    }
+
+    .activity-card:last-child {
+      margin-bottom: 0
+    }
+
+    .activity-card:hover {
+      background: rgba(255, 255, 255, 0.09)
+    }
+
+    .activity-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0
+    }
+
+    .icon-food {
+      background: rgba(231, 76, 60, 0.2)
+    }
+
+    .icon-sight {
+      background: rgba(52, 152, 219, 0.2)
+    }
+
+    .icon-hotel {
+      background: rgba(200, 150, 62, 0.2)
+    }
+
+    .icon-transport {
+      background: rgba(46, 204, 113, 0.2)
+    }
+
+    .activity-info {
+      flex: 1
+    }
+
+    .activity-time {
+      font-size: 11px;
+      color: var(--gold);
+      font-weight: 600;
+      margin-bottom: 2px
+    }
+
+    .activity-name {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 2px
+    }
+
+    .activity-note {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .add-activity-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: 1px dashed rgba(200, 150, 62, 0.5);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: var(--gold);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 4px;
+      font-family: 'DM Sans', sans-serif;
+      transition: all 0.2s
+    }
+
+    .add-activity-btn:hover {
+      background: rgba(200, 150, 62, 0.1)
+    }
+
+    .map-placeholder {
+      margin: 0 16px;
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      height: 380px
+    }
+
+    .map-placeholder img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover
+    }
+
+    .map-placeholder-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 22, 40, 0.5);
+      backdrop-filter: blur(2px)
+    }
+
+    .map-pin {
+      font-size: 32px;
+      animation: bounce 1.5s infinite
+    }
+
+    @keyframes bounce {
+
+      0%,
+      100% {
+        transform: translateY(0)
+      }
+
+      50% {
+        transform: translateY(-10px)
+      }
+    }
+
+    /* ====== SCREEN 4: BUDGET ====== */
+    #screen-budget {
+      padding-top: 52px
+    }
+
+    .budget-header {
+      padding: 0 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .budget-title {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif
+    }
+
+    .budget-summary {
+      margin: 0 16px 20px;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px
+    }
+
+    .bsum-item {
+      text-align: center
+    }
+
+    .bsum-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px
+    }
+
+    .bsum-value {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif
+    }
+
+    .bsum-value.gold {
+      color: var(--gold)
+    }
+
+    .bsum-value.success {
+      color: var(--success)
+    }
+
+    .bsum-value.danger {
+      color: var(--danger)
+    }
+
+    .bsum-divider {
+      width: 1px;
+      background: var(--border)
+    }
+
+    .donut-wrap {
+      margin: 0 16px 20px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center
+    }
+
+    .donut-chart-container {
+      position: relative;
+      width: 180px;
+      height: 180px
+    }
+
+    .donut-center-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center
+    }
+
+    .donut-center-pct {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--gold);
+      font-family: 'Playfair Display', serif
+    }
+
+    .donut-center-sub {
+      font-size: 11px;
+      color: var(--muted)
+    }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 20px;
+      margin-top: 20px;
+      width: 100%
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0
+    }
+
+    .legend-label {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .legend-amount {
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: auto
+    }
+
+    .expense-section-title {
+      font-size: 16px;
+      font-weight: 600;
+      padding: 0 16px 12px
+    }
+
+    .expense-list {
+      padding: 0 16px
+    }
+
+    .expense-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 14px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.2s
+    }
+
+    .expense-item:hover {
+      background: rgba(255, 255, 255, 0.05)
+    }
+
+    .expense-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0
+    }
+
+    .expense-info {
+      flex: 1
+    }
+
+    .expense-name {
+      font-size: 14px;
+      font-weight: 600
+    }
+
+    .expense-meta {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .expense-amount {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--white)
+    }
+
+    /* FAB */
+    .fab {
+      padding: 3px 5px 5px 5px;
+      position: fixed;
+      bottom: 80px;
+      right: calc(50% - 197px);
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: var(--gold);
+      border: none;
+      color: var(--navy);
+      font-size: 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 20px rgba(200, 150, 62, 0.5);
+      transition: all 0.3s;
+      z-index: 900
+    }
+
+    .fab:hover {
+      transform: scale(1.1) rotate(90deg);
+      background: var(--gold-light);
+      box-shadow: 0 8px 32px rgba(200, 150, 62, 0.6)
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      backdrop-filter: blur(6px)
+    }
+
+    .modal-overlay.visible {
+      opacity: 1;
+      pointer-events: all
+    }
+
+    .modal {
+      background: linear-gradient(180deg, rgba(15, 30, 55, 0.99), rgba(10, 22, 40, 1));
+      border-radius: 24px 24px 0 0;
+      border-top: 1px solid var(--border);
+      padding: 0 16px 40px;
+      width: 100%;
+      max-width: 430px;
+      transform: translateY(100%);
+      transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1)
+    }
+
+    .modal-overlay.visible .modal {
+      transform: translateY(0)
+    }
+
+    /* ====== SCREEN 5: JOURNAL ====== */
+    #screen-journal {
+      padding-top: 52px
+    }
+
+    .journal-header {
+      padding: 0 16px 8px
+    }
+
+    .journal-trip {
+      font-size: 13px;
+      color: var(--gold);
+      font-weight: 600;
+      margin-bottom: 4px
+    }
+
+    .journal-title-main {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'Playfair Display', serif;
+      margin-bottom: 6px
+    }
+
+    .journal-quote {
+      font-size: 13px;
+      color: var(--muted);
+      font-style: italic;
+      margin-bottom: 20px
+    }
+
+    .masonry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 0 16px
+    }
+
+    .memory-card {
+      border-radius: 16px;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: transform 0.3s
+    }
+
+    .memory-card:hover {
+      transform: scale(1.02)
+    }
+
+    .memory-img {
+      width: 100%;
+      display: block;
+      object-fit: cover
+    }
+
+    .memory-card:nth-child(1) .memory-img {
+      height: 220px
+    }
+
+    .memory-card:nth-child(2) .memory-img {
+      height: 160px
+    }
+
+    .memory-card:nth-child(3) .memory-img {
+      height: 160px
+    }
+
+    .memory-card:nth-child(4) .memory-img {
+      height: 200px
+    }
+
+    .memory-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(10, 22, 40, 0.95) 0%, transparent 55%)
+    }
+
+    .memory-content {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      right: 12px
+    }
+
+    .mood-tag {
+      display: inline-block;
+      background: rgba(200, 150, 62, 0.3);
+      border: 1px solid rgba(200, 150, 62, 0.6);
+      border-radius: 8px;
+      font-size: 10px;
+      color: var(--gold);
+      padding: 3px 8px;
+      font-weight: 600;
+      margin-bottom: 6px
+    }
+
+    .memory-note {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.85);
+      line-height: 1.4
+    }
+
+    .memory-date {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px
+    }
+
+    /* Full screen journal view */
+    .fullscreen-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s
+    }
+
+    .fullscreen-overlay.visible {
+      opacity: 1;
+      pointer-events: all
+    }
+
+    .fullscreen-close {
+      position: absolute;
+      top: 52px;
+      right: 16px;
+      width: 38px;
+      height: 38px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 20px;
+      z-index: 10;
+      border: 1px solid rgba(255, 255, 255, 0.2)
+    }
+
+    .fullscreen-img {
+      width: 100%;
+      height: 60vh;
+      object-fit: cover
+    }
+
+    .fullscreen-info {
+      padding: 24px 16px;
+      flex: 1
+    }
+
+    .fullscreen-mood {
+      display: inline-block;
+      background: rgba(200, 150, 62, 0.25);
+      border: 1px solid rgba(200, 150, 62, 0.6);
+      border-radius: 10px;
+      font-size: 12px;
+      color: var(--gold);
+      padding: 5px 12px;
+      font-weight: 600;
+      margin-bottom: 12px
+    }
+
+    .fullscreen-note {
+      font-size: 16px;
+      line-height: 1.7;
+      color: rgba(255, 255, 255, 0.9)
+    }
+
+    .fullscreen-date {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 12px
+    }
+
+    /* Add memory modal */
+    .add-memory-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1300;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      backdrop-filter: blur(6px)
+    }
+
+    .add-memory-overlay.visible {
+      opacity: 1;
+      pointer-events: all
+    }
+
+    .add-memory-sheet {
+      background: linear-gradient(180deg, rgba(15, 30, 55, 0.99), rgba(10, 22, 40, 1));
+      border-radius: 24px 24px 0 0;
+      border-top: 1px solid var(--border);
+      padding: 0 16px 40px;
+      width: 100%;
+      max-width: 430px;
+      transform: translateY(100%);
+      transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1)
+    }
+
+    .add-memory-overlay.visible .add-memory-sheet {
+      transform: translateY(0)
+    }
+
+    .photo-upload {
+      width: 100%;
+      height: 120px;
+      border: 2px dashed var(--border);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      gap: 8px;
+      transition: all 0.3s;
+      background: var(--frosted)
+    }
+
+    .photo-upload:hover {
+      border-color: var(--gold);
+      background: rgba(200, 150, 62, 0.05)
+    }
+
+    .photo-upload-icon {
+      font-size: 28px
+    }
+
+    .photo-upload-text {
+      font-size: 13px;
+      color: var(--muted)
+    }
+
+    /* Shimmer */
+    @keyframes shimmer {
+      0% {
+        background-position: -200px 0
+      }
+
+      100% {
+        background-position: 200px 0
+      }
+    }
+
+    .shimmer {
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.05) 100%);
+      background-size: 400px;
+      animation: shimmer 1.5s infinite
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: var(--gold);
+      color: var(--navy);
+      padding: 12px 24px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 700;
+      z-index: 9999;
+      transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+      box-shadow: 0 4px 20px rgba(200, 150, 62, 0.4)
+    }
+
+    .toast.visible {
+      transform: translateX(-50%) translateY(0)
+    }
+
+
+    /* esplore destination slider*/
+    /* Slider improvements */
+    .dest-scroll {
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+    }
+
+    .dest-card {
+      scroll-snap-align: start;
+    }
+
+    /* Slider arrows */
+    .slider-controls {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 0 16px 8px;
+    }
+
+    .slider-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--frosted);
+      color: var(--white);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .slider-btn:hover {
+      background: var(--gold);
+      color: var(--navy);
+    }
+
+    /* See all grid */
+    .dest-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .dest-scroll {
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      cursor: grab;
+    }
+
+    .dest-scroll:active {
+      cursor: grabbing;
+    }
+
+    .dest-card {
+      scroll-snap-align: start;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .dest-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      /* important */
+      padding: 52px 16px 16px;
+    }
+
+    .dest-header .back-btn {
+      position: static;
+      /* remove absolute */
+    }
+
+    .dest-header .trips-title {
+      width: auto;
+      text-align: left;
+      font-size: 22px;
+      font-family: 'Playfair Display', serif;
+    }
+
+    /* image preview */
+    .add-memory-sheet {
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    #image-preview {
+      width: 100%;
+      max-height: 200px;
+      object-fit: cover;
+      border-radius: 10px;
+      display: none;
+    }
+
+    /* ===== DROPDOWN IMPROVEMENT ===== */
+    .dropdown {
+      display: none;
+    }
+
+    .dropdown.show {
+      display: block;
+    }
+
+    .dropdown {
+      position: absolute;
+      top: 102px;
+      right: 12px;
+      width: 220px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(20, 20, 20, 0.6);
+      backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      animation: fadeIn 0.2s ease;
+      z-index: 1;
+    }
+
+    .profile-preview {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .profile-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+    }
+
+    .profile-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .profile-email {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .dropdown-item {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      transition: 0.2s;
+      cursor: pointer;
+    }
+
+    .dropdown-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    /* ===== MODAL IMPROVEMENT ===== */
+    .modal {
+      /* position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%); */
+      padding: 20px;
+      border-radius: 20px;
+      width: 320px;
+      background: rgba(20, 20, 20, 0.7);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .sheet-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    /* ===== IMAGE UPLOAD ===== */
+    .photo-upload {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      margin: auto;
+      overflow: hidden;
+    }
+
+    #profile-preview {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    /* Pen icon */
+    .photo-upload::after {
+      content: "✏️";
+      font-size: 14px;
+    }
+
+    /* ===== FORM ===== */
+    .form-group {
+      margin-top: 12px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
+      color: white;
+    }
+
+    /* ===== BUTTON ROW ===== */
+    .modal button {
+      flex: 1;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+    }
+
+    .submit-btn {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .modal-actions button {
+      flex: 1;
+      /* equal width */
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+
+    /* Cancel button (ADD THIS) */
+    .modal-actions button:last-child {
+      background: rgba(255, 255, 255, 0.08);
+      color: white;
+    }
+
+    /* animation */
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-5px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .modal-actions button:hover {
+      transform: scale(1.03);
+      transition: 0.2s;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+
+    <!-- ===== BOTTOM NAV ===== -->
+    <nav class="bottom-nav">
+      <div class="nav-item active" onclick="navigate('home')">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Home</span>
+      </div>
+      <div class="nav-item" onclick="navigate('trips')">
+        <span class="nav-icon">✈️</span>
+        <span class="nav-label">Trips</span>
+      </div>
+      <div class="nav-item" onclick="navigate('budget')">
+        <span class="nav-icon">💰</span>
+        <span class="nav-label">Budget</span>
+      </div>
+      <div class="nav-item" onclick="navigate('journal')">
+        <span class="nav-icon">📖</span>
+        <span class="nav-label">Journal</span>
+      </div>
+    </nav>
+
+    <!-- ===== SCREEN 1: HOME ===== -->
+    <div id="screen-home" class="screen active">
+      <div class="home-header">
+        <div>
+          <div class="home-greeting">Welcome back Wanderer,</div>
+          <div class="home-title">Where to next? 🌍</div>
+        </div>
+        <div class="avatar-wrapper">
+          <div style="cursor: pointer;" class="avatar" id="avatar" onclick="toggleDropdown(event)">👤</div>
+
+          <div class="dropdown" id="user-dropdown">
+            <div class="profile-preview">
+              <div class="profile-avatar" id="profile-avatar">👤</div>
+              <div>
+                <div class="profile-name" id="profile-name">Riya Patel</div>
+                <div class="profile-email" id="profile-email">riya@gmail.com</div>
+              </div>
+            </div>
+
+            <div class="dropdown-item" onclick="openProfile()">✏️ Edit Profile</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="profile-modal">
+        <div class="modal">
+          <div class="sheet-title">Edit Profile 👤</div>
+          <form onsubmit="saveProfile(event)">
+            <!-- Upload -->
+            <div class="form-group">
+              <div class="photo-upload" onclick="document.getElementById('profile-image-input').click()">
+                <input type="file" id="profile-image-input" accept="image/*" style="display:none"
+                  onchange="previewProfile(event)">
+                <img id="profile-preview" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <input class="form-input" id="profile-name-input" placeholder="Name" required />
+            </div>
+
+            <div class="form-group">
+              <input class="form-input" type="email" id="profile-email-input" placeholder="Email" required />
+            </div>
+
+            <!-- Buttons -->
+            <div class="modal-actions">
+              <button class="submit-btn">Save</button>
+              <button type="button" onclick="closeProfile()">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <!-- Hero Card -->
+      <div class="hero-card" onclick="navigate('itinerary')">
+        <img class="hero-img" src="https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800&q=80"
+          alt="Santorini" />
+        <div class="hero-overlay"></div>
+        <div class="hero-glass">
+          <div class="hero-badge">⭐ Next Trip</div>
+          <div class="hero-dest">Santorini Escape</div>
+          <div class="hero-dates">June 14 – June 24, 2026 · Greece</div>
+          <div class="hero-bottom">
+            <div class="countdown-pill">
+              <div>
+                <div class="countdown-num" id="countdown-num">59</div>
+              </div>
+              <div class="countdown-label">days<br />to go</div>
+            </div>
+            <div class="travelers-pill">
+              <span>👥</span><span>2 travelers</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Explore Destinations -->
+      <div class="section-header">
+        <div class="section-title">Explore Destinations</div>
+        <div class="see-all" onclick="openAllDestinations()">See all</div>
+      </div>
+
+      <!-- Slider Controls -->
+      <div class="slider-controls">
+        <button class="slider-btn" onclick="scrollDest(-1)">←</button>
+        <button class="slider-btn" onclick="scrollDest(1)">→</button>
+      </div>
+
+      <div style="margin: 10px;" class="dest-scroll" id="dest-scroll">
+        <div class="dest-card">
+          <img class="dest-img" src="https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&q=80"
+            alt="Bali" />
+          <div class="dest-overlay"></div>
+          <div class="dest-info">
+            <div class="dest-name">Bali</div>
+            <div class="dest-country">Indonesia</div>
+            <div class="dest-tag">🌿 Wellness</div>
+          </div>
+        </div>
+        <div class="dest-card">
+          <img class="dest-img" src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400&q=80"
+            alt="Kyoto" />
+          <div class="dest-overlay"></div>
+          <div class="dest-info">
+            <div class="dest-name">Kyoto</div>
+            <div class="dest-country">Japan</div>
+            <div class="dest-tag">🌸 Cultural</div>
+          </div>
+        </div>
+        <div class="dest-card">
+          <img class="dest-img" src="https://images.unsplash.com/photo-1533104816931-20fa691ff6ca?w=400&q=80"
+            alt="Amalfi" />
+          <div class="dest-overlay"></div>
+          <div class="dest-info">
+            <div class="dest-name">Amalfi Coast</div>
+            <div class="dest-country">Italy</div>
+            <div class="dest-tag">☀️ Luxury</div>
+          </div>
+        </div>
+        <div class="dest-card">
+          <img class="dest-img" src="https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=400&q=80"
+            alt="Dubai" />
+          <div class="dest-overlay"></div>
+          <div class="dest-info">
+            <div class="dest-name">Dubai</div>
+            <div class="dest-country">UAE</div>
+            <div class="dest-tag">✨ Luxury</div>
+          </div>
+        </div>
+        <div class="dest-card">
+          <img class="dest-img" src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400&q=80"
+            alt="Paris" />
+          <div class="dest-overlay"></div>
+          <div class="dest-info">
+            <div class="dest-name">Paris</div>
+            <div class="dest-country">France</div>
+            <div class="dest-tag">🗼 Romance</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="section-header">
+        <div class="section-title">Your Travel Stats</div>
+      </div>
+      <div class="quick-stats">
+        <div class="stat-card glass" onclick="navigate('trips')">
+          <div class="stat-icon">✈️</div>
+          <span class="stat-value" id="stat-trips">0</span>
+          <span class="stat-label">Active Trips</span>
+        </div>
+
+        <div class="stat-card glass" onclick="navigate('destinations')">
+          <div class="stat-icon">🌍</div>
+          <span class="stat-value" id="stat-countries">0</span>
+          <span class="stat-label">Countries Visited</span>
+        </div>
+
+        <div class="stat-card glass" onclick="navigate('journal')">
+          <div class="stat-icon">📸</div>
+          <span class="stat-value" id="stat-memories">0</span>
+          <span class="stat-label">Memories Saved</span>
+        </div>
+
+        <div class="stat-card glass" onclick="navigate('budget')">
+          <div class="stat-icon">💰</div>
+          <span class="stat-value" id="stat-budget">₹0</span>
+          <span class="stat-label">Total Budget</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ===== SCREEN: ALL DESTINATIONS ===== -->
+    <div id="screen-destinations" class="screen">
+      <div class="dest-header">
+        <div class="trips-title">All Destinations</div>
+        <div class="back-btn" onclick="navigate('home')">←</div>
+      </div>
+
+      <div class="dest-grid" id="dest-grid"></div>
+    </div>
+
+    <!-- ===== SCREEN 2: TRIPS ===== -->
+    <div id="screen-trips" class="screen">
+
+      <div class="trips-header">
+
+        <div class="left-header">
+          <div class="back-btn" onclick="navigate('home')">く</div>
+          <div class="trips-title">My Trips</div>
+        </div>
+
+        <button class="new-trip-btn" onclick="openNewTrip()">+ New Trip</button>
+
+      </div>
+
+      <!-- Trip cards -->
+      <div id="trips-list">
+        <div class="trip-card glass" onclick="navigate('itinerary')" style="overflow:hidden">
+          <img class="trip-card-img" src="https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=600&q=80"
+            alt="Santorini" />
+          <div class="trip-card-body">
+            <div class="trip-card-top">
+              <div class="trip-name">Santorini Escape</div>
+              <div class="trip-style-tag tag-luxury">Luxury</div>
+            </div>
+            <div class="trip-dates">📅 June 14 – June 24, 2026</div>
+            <div class="trip-meta"><span>👥 2 travelers</span><span>·</span><span>🇬🇷
+                Greece</span><span>·</span><span>10 days</span></div>
+          </div>
+        </div>
+        <div class="trip-card glass" style="overflow:hidden">
+          <img class="trip-card-img" src="https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&q=80"
+            alt="Bali" />
+          <div class="trip-card-body">
+            <div class="trip-card-top">
+              <div class="trip-name">Bali Soul Retreat</div>
+              <div class="trip-style-tag tag-beach">Beach</div>
+            </div>
+            <div class="trip-dates">📅 August 2 – August 12, 2026</div>
+            <div class="trip-meta"><span>👥 4 travelers</span><span>·</span><span>🇮🇩
+                Indonesia</span><span>·</span><span>10 days</span></div>
+          </div>
+        </div>
+        <div class="trip-card glass" style="overflow:hidden">
+          <img class="trip-card-img" src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600&q=80"
+            alt="Kyoto" />
+          <div class="trip-card-body">
+            <div class="trip-card-top">
+              <div class="trip-name">Kyoto Cherry Trail</div>
+              <div class="trip-style-tag tag-cultural">Cultural</div>
+            </div>
+            <div class="trip-dates">📅 March 20 – March 30, 2027</div>
+            <div class="trip-meta"><span>👥 2 travelers</span><span>·</span><span>🇯🇵
+                Japan</span><span>·</span><span>10 days</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Trip Bottom Sheet -->
+    <div class="overlay" id="sheet-overlay" onclick="closeNewTrip()"></div>
+    <div class="bottom-sheet" id="new-trip-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Plan a New Trip ✈️</div>
+      <div class="form-group">
+        <label class="form-label">Destination</label>
+        <input class="form-input" placeholder="e.g. Maldives, Iceland..." id="dest-input" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Start Date</label>
+          <input class="form-input" type="date" id="start-date" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Date</label>
+          <input class="form-input" type="date" id="end-date" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Travelers</label>
+        <div class="travelers-counter">
+          <button class="counter-btn" onclick="changeCount(-1)">−</button>
+          <div class="counter-val" id="traveler-count">2</div>
+          <button class="counter-btn" onclick="changeCount(1)">＋</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Trip Style</label>
+        <div class="chip-row" id="chip-row">
+          <div class="chip selected" onclick="selectChip(this)">Adventure</div>
+          <div class="chip" onclick="selectChip(this)">Luxury</div>
+          <div class="chip" onclick="selectChip(this)">Beach</div>
+          <div class="chip" onclick="selectChip(this)">Cultural</div>
+        </div>
+      </div>
+      <button class="submit-btn" onclick="addTrip()">Create Trip 🗺️</button>
+    </div>
+
+    <!-- ===== SCREEN 3: ITINERARY ===== -->
+    <div id="screen-itinerary" class="screen">
+      <div class="itin-cover">
+
+        <img class="itin-cover-img" src="https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800&q=80"
+          alt="Santorini" />
+        <div class="itin-cover-overlay"></div>
+        <div class="back-btn" onclick="navigate('home')">←</div>
+        <div class="itin-cover-info">
+          <div class="itin-cover-glass">
+            <div class="itin-cover-name">Santorini Escape</div>
+            <div class="itin-cover-meta">📅 June 14 - June 24, 2026 · 🇬🇷 Greece · 👥 2 travelers</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="view-toggle">
+        <button class="toggle-btn active" id="list-toggle" onclick="switchView('list')">📋 List View</button>
+        <button class="toggle-btn" id="map-toggle" onclick="switchView('map')">🗺️ Map View</button>
+      </div>
+
+      <!-- List View -->
+      <div id="list-view">
+        <!-- Day 1 -->
+        <div class="accordion-day">
+          <div class="day-header open" onclick="toggleDay(this)">
+            <div>
+              <div class="day-title-text">Day 1 — June 14</div>
+              <div class="day-subtitle">3 activities · Arrival day</div>
+            </div>
+            <div class="day-arrow open">▼</div>
+          </div>
+          <div class="day-body open">
+            <div class="day-body-inner">
+              <div class="activity-card">
+                <div class="activity-icon icon-transport">✈️</div>
+                <div class="activity-info">
+                  <div class="activity-time">09:00 AM</div>
+                  <div class="activity-name">Arrive at Santorini Airport</div>
+                  <div class="activity-note">Flight OA360 from Athens · Pick up rental car</div>
+                </div>
+              </div>
+              <div class="activity-card">
+                <div class="activity-icon icon-hotel">🏨</div>
+                <div class="activity-info">
+                  <div class="activity-time">02:00 PM</div>
+                  <div class="activity-name">Canaves Oia Suites</div>
+                  <div class="activity-note">Check-in · Cave suite with caldera view</div>
+                </div>
+              </div>
+              <div class="activity-card">
+                <div class="activity-icon icon-food">🍽️</div>
+                <div class="activity-info">
+                  <div class="activity-time">07:30 PM</div>
+                  <div class="activity-name">Dinner at Metaxy Mas</div>
+                  <div class="activity-note">Authentic Greek mezze · Reservation confirmed</div>
+                </div>
+              </div>
+              <button class="add-activity-btn" onclick="openActivityModal(this)">＋ Add Activity</button>
+            </div>
+          </div>
+        </div>
+        <!-- Day 2 -->
+        <div class="accordion-day">
+          <div class="day-header" onclick="toggleDay(this)">
+            <div>
+              <div class="day-title-text">Day 2 — June 15</div>
+              <div class="day-subtitle">3 activities · Explore Oia</div>
+            </div>
+            <div class="day-arrow">▼</div>
+          </div>
+          <div class="day-body">
+            <div class="day-body-inner">
+              <div class="activity-card">
+                <div class="activity-icon icon-food">☕</div>
+                <div class="activity-info">
+                  <div class="activity-time">08:00 AM</div>
+                  <div class="activity-name">Breakfast at PK Cocktail Bar</div>
+                  <div class="activity-note">Rooftop breakfast with caldera view</div>
+                </div>
+              </div>
+              <div class="activity-card">
+                <div class="activity-icon icon-sight">🔭</div>
+                <div class="activity-info">
+                  <div class="activity-time">10:30 AM</div>
+                  <div class="activity-name">Oia Castle Sunrise Point</div>
+                  <div class="activity-note">Walk the blue-domed village · Photography session</div>
+                </div>
+              </div>
+              <div class="activity-card">
+                <div class="activity-icon icon-sight">⛵</div>
+                <div class="activity-info">
+                  <div class="activity-time">03:00 PM</div>
+                  <div class="activity-name">Catamaran Sunset Cruise</div>
+                  <div class="activity-note">4-hour sailing tour · BBQ dinner on board</div>
+                </div>
+              </div>
+              <button class="add-activity-btn" onclick="openActivityModal(this)">＋ Add Activity</button>
+            </div>
+          </div>
+        </div>
+        <!-- Day 3 -->
+        <div class="accordion-day">
+          <div class="day-header" onclick="toggleDay(this)">
+            <div>
+              <div class="day-title-text">Day 3 — June 16</div>
+              <div class="day-subtitle">3 activities · Fira & Beaches</div>
+            </div>
+            <div class="day-arrow">▼</div>
+          </div>
+          <div class="day-body">
+            <div class="day-body-inner">
+              <div class="activity-card">
+                <div class="activity-icon icon-sight">🏛️</div>
+                <div class="activity-info">
+                  <div class="activity-time">09:00 AM</div>
+                  <div class="activity-name">Akrotiri Archaeological Site</div>
+                  <div class="activity-note">Ancient Minoan Bronze Age settlement</div>
+                </div>
+              </div>
+              <div class="activity-card">
+                <div class="activity-icon icon-sight">🏖️</div>
+                <div class="activity-info">
+                  <div class="activity-time">12:30 PM</div>
+                  <div class="activity-name">Red Beach</div>
+                  <div class="activity-note">Famous volcanic red cliffs · Swim & snorkel</div>
+                </div>
+              </div>
+              <div class="activity-card">
+                <div class="activity-icon icon-food">🍷</div>
+                <div class="activity-info">
+                  <div class="activity-time">07:00 PM</div>
+                  <div class="activity-name">Wine Tasting at Santo Wines</div>
+                  <div class="activity-note">Assyrtiko variety · Cliffside terrace</div>
+                </div>
+              </div>
+              <button class="add-activity-btn" onclick="openActivityModal(this)">＋ Add Activity</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map View -->
+      <div id="map-view" style="display:none">
+        <div class="map-placeholder"
+          style="margin:0 16px;height:420px;border-radius:20px;overflow:hidden;position:relative">
+          <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=600&q=80"
+            style="width:100%;height:100%;object-fit:cover" />
+          <div style="position:absolute;inset:0;background:rgba(10,22,40,0.4)"></div>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+            <div style="font-size:40px;animation:bounce 1.5s infinite">📍</div>
+            <div class="glass" style="margin-top:12px;padding:12px 20px;font-size:14px;font-weight:600">Santorini,
+              Greece</div>
+          </div>
+          <!-- Pins -->
+          <div style="position:absolute;top:30%;left:40%;font-size:22px;cursor:pointer" title="Canaves Oia">🏨</div>
+          <div style="position:absolute;top:45%;left:60%;font-size:22px;cursor:pointer" title="Metaxy Mas">🍽️</div>
+          <div style="position:absolute;top:60%;left:35%;font-size:22px;cursor:pointer" title="Red Beach">🏖️</div>
+          <div style="position:absolute;top:25%;left:70%;font-size:22px;cursor:pointer" title="Santo Wines">🍷</div>
+        </div>
+        <div style="padding:16px;font-size:13px;color:var(--muted);text-align:center">📍 7 locations pinned across
+          Santorini</div>
+      </div>
+    </div>
+    <div class="modal-overlay" id="activity-modal">
+      <div class="modal">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">Add Activity 🗓️</div>
+
+        <div class="form-group">
+          <label class="form-label">Time</label>
+          <input class="form-input" type="time" id="activity-time" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Activity Name</label>
+          <input class="form-input" placeholder="e.g. Visit Beach" id="activity-name" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Note</label>
+          <input class="form-input" placeholder="Optional note" id="activity-note" />
+        </div>
+
+        <button class="submit-btn" onclick="addActivity()">Add Activity</button>
+        <button onclick="closeActivityModal()"
+          style="width:100%;background:none;border:none;color:var(--muted);padding:14px">Cancel</button>
+      </div>
+    </div>
+
+    <!-- ===== SCREEN 4: BUDGET ===== -->
+    <div id="screen-budget" class="screen">
+      <div class="budget-header">
+        <div class="budget-title">Budget Tracker</div>
+        <div class="back-btn" onclick="navigate('home')">←</div>
+
+      </div>
+
+      <!-- Summary bar -->
+      <div class="budget-summary glass">
+        <div class="bsum-item">
+          <div class="bsum-label">Total Budget</div>
+          <div class="bsum-value gold" id="total-budget">₹1,80,000</div>
+        </div>
+        <div class="bsum-divider"></div>
+        <div class="bsum-item">
+          <div class="bsum-label">Spent</div>
+          <div class="bsum-value" id="total-spent" style="color:var(--white)">₹1,12,500</div>
+        </div>
+        <div class="bsum-divider"></div>
+        <div class="bsum-item">
+          <div class="bsum-label">Remaining</div>
+          <div class="bsum-value success" id="remaining">₹67,500</div>
+        </div>
+      </div>
+
+      <!-- Donut Chart -->
+      <div class="donut-wrap glass" style="margin:0 16px 20px">
+        <div class="donut-chart-container">
+          <svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:180px;height:180px">
+            <!-- Accommodation 35% -->
+            <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#C8963E" stroke-width="3.5"
+              stroke-dasharray="35 65" stroke-dashoffset="0" />
+            <!-- Food 25% -->
+            <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#5DADE2" stroke-width="3.5"
+              stroke-dasharray="25 75" stroke-dashoffset="-35" />
+            <!-- Transport 15% -->
+            <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#2ECC71" stroke-width="3.5"
+              stroke-dasharray="15 85" stroke-dashoffset="-60" />
+            <!-- Activities 18% -->
+            <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#BB8FCE" stroke-width="3.5"
+              stroke-dasharray="18 82" stroke-dashoffset="-75" />
+            <!-- Shopping 7% -->
+            <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#E74C3C" stroke-width="3.5"
+              stroke-dasharray="7 93" stroke-dashoffset="-93" />
+          </svg>
+          <div class="donut-center-label">
+            <div class="donut-center-pct">62%</div>
+            <div class="donut-center-sub">spent</div>
+          </div>
+        </div>
+        <div class="legend-grid">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#C8963E"></div><span
+              class="legend-label">Accommodation</span><span class="legend-amount">₹39,375</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#5DADE2"></div><span class="legend-label">Food</span><span
+              class="legend-amount">₹28,125</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#2ECC71"></div><span class="legend-label">Transport</span><span
+              class="legend-amount">₹16,875</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#BB8FCE"></div><span class="legend-label">Activities</span><span
+              class="legend-amount">₹20,250</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#E74C3C"></div><span class="legend-label">Shopping</span><span
+              class="legend-amount">₹7,875</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Expense List -->
+      <div class="expense-section-title">Recent Expenses</div>
+      <div class="expense-list" id="expense-list">
+        <div class="expense-item glass">
+          <div class="expense-icon" style="background:rgba(200,150,62,0.15)">🏨</div>
+          <div class="expense-info">
+            <div class="expense-name">Canaves Oia Suites (5 nights)</div>
+            <div class="expense-meta">Jun 14 · Accommodation</div>
+          </div>
+          <div class="expense-amount">₹39,375</div>
+        </div>
+        <div class="expense-item glass">
+          <div class="expense-icon" style="background:rgba(93,173,226,0.15)">🍽️</div>
+          <div class="expense-info">
+            <div class="expense-name">Dinner at Metaxy Mas</div>
+            <div class="expense-meta">Jun 14 · Food</div>
+          </div>
+          <div class="expense-amount">₹4,500</div>
+        </div>
+        <div class="expense-item glass">
+          <div class="expense-icon" style="background:rgba(46,204,113,0.15)">✈️</div>
+          <div class="expense-info">
+            <div class="expense-name">Athens–Santorini Flight</div>
+            <div class="expense-meta">Jun 14 · Transport</div>
+          </div>
+          <div class="expense-amount">₹8,400</div>
+        </div>
+        <div class="expense-item glass">
+          <div class="expense-icon" style="background:rgba(187,143,206,0.15)">⛵</div>
+          <div class="expense-info">
+            <div class="expense-name">Catamaran Sunset Cruise</div>
+            <div class="expense-meta">Jun 15 · Activities</div>
+          </div>
+          <div class="expense-amount">₹12,000</div>
+        </div>
+        <div class="expense-item glass">
+          <div class="expense-icon" style="background:rgba(231,76,60,0.15)">🛍️</div>
+          <div class="expense-info">
+            <div class="expense-name">Local Ceramics & Souvenirs</div>
+            <div class="expense-meta">Jun 15 · Shopping</div>
+          </div>
+          <div class="expense-amount">₹5,200</div>
+        </div>
+        <div class="expense-item glass">
+          <div class="expense-icon" style="background:rgba(200,150,62,0.15)">🍷</div>
+          <div class="expense-info">
+            <div class="expense-name">Wine Tasting at Santo Wines</div>
+            <div class="expense-meta">Jun 16 · Food</div>
+          </div>
+          <div class="expense-amount">₹3,800</div>
+        </div>
+      </div>
+      <div style="height:80px"></div>
+
+      <!-- FAB -->
+      <button class="fab" onclick="openExpenseModal()" id="budget-fab">＋</button>
+    </div>
+
+    <!-- Expense Modal -->
+    <div class="modal-overlay" id="expense-modal">
+      <div class="modal">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">Add Expense 💸</div>
+        <div class="form-group">
+          <label class="form-label">Amount (₹)</label>
+          <input class="form-input" type="number" placeholder="0" id="expense-amount" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select class="form-input" id="expense-category" style="appearance:none;cursor:pointer">
+            <option value="Food">🍽️ Food</option>
+            <option value="Accommodation">🏨 Accommodation</option>
+            <option value="Transport">✈️ Transport</option>
+            <option value="Activities">🎭 Activities</option>
+            <option value="Shopping">🛍️ Shopping</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Note</label>
+          <input class="form-input" placeholder="What was this for?" id="expense-note" />
+        </div>
+        <button class="submit-btn" onclick="addExpense()">Add Expense</button>
+        <button onclick="closeExpenseModal()"
+          style="width:100%;background:transparent;border:none;color:var(--muted);padding:14px;cursor:pointer;font-size:14px;font-family:'DM Sans',sans-serif">Cancel</button>
+      </div>
+    </div>
+
+    <!-- ===== SCREEN 5: JOURNAL ===== -->
+    <div id="screen-journal" class="screen">
+      <div style="display: flex;align-items: center;justify-content: space-between;">
+        <div class="journal-header">
+          <div class="journal-trip">✈️ Santorini Escape · June 2026</div>
+          <div class="journal-title-main">Travel Journal</div>
+          <div class="journal-quote">"Every trip is a story waiting to be told."</div>
+        </div>
+        <div style="margin: 0 14px 14px 0;" class="back-btn" onclick="navigate('home')">←</div>
+      </div>
+
+      <div class="masonry-grid" id="masonry-grid">
+        <div class="memory-card" onclick="openMemory(0)">
+          <img class="memory-img" src="https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=400&q=80"
+            alt="Santorini sunset" />
+          <div class="memory-overlay"></div>
+          <div class="memory-content">
+            <div class="mood-tag">😌 Blissful</div>
+            <div class="memory-note">Watching the sun melt into the caldera from our terrace. Pure magic.</div>
+            <div class="memory-date">June 14, 2026</div>
+          </div>
+        </div>
+        <div class="memory-card" onclick="openMemory(1)">
+          <img class="memory-img" src="https://images.unsplash.com/photo-1555993539-1732b0258235?w=400&q=80"
+            alt="Greek food" />
+          <div class="memory-overlay"></div>
+          <div class="memory-content">
+            <div class="mood-tag">😄 Adventurous</div>
+            <div class="memory-note">Tried every mezze on the menu. Octopus was incredible.</div>
+            <div class="memory-date">June 14, 2026</div>
+          </div>
+        </div>
+        <div class="memory-card" onclick="openMemory(2)">
+          <img class="memory-img" src="https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=400&q=80"
+            alt="Sailing" />
+          <div class="memory-overlay"></div>
+          <div class="memory-content">
+            <div class="mood-tag">🌊 Peaceful</div>
+            <div class="memory-note">Sailing at dusk. The sky turned three shades of orange.</div>
+            <div class="memory-date">June 15, 2026</div>
+          </div>
+        </div>
+        <div class="memory-card" onclick="openMemory(3)">
+          <img class="memory-img" src="https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=400&q=80"
+            alt="Blue dome" />
+          <div class="memory-overlay"></div>
+          <div class="memory-content">
+            <div class="mood-tag">😴 Tired but Happy</div>
+            <div class="memory-note">10,000 steps through Oia's winding lanes. Worth every blister.</div>
+            <div class="memory-date">June 15, 2026</div>
+          </div>
+        </div>
+      </div>
+      <div style="height:100px"></div>
+
+      <!-- FAB for Journal -->
+      <button class="fab" onclick="openAddMemory()" id="journal-fab" style="display:none">＋</button>
+    </div>
+
+    <!-- Full screen memory view -->
+    <div class="fullscreen-overlay" id="memory-fullscreen">
+      <div class="fullscreen-close" onclick="closeMemory()">✕</div>
+      <img id="fs-img" class="fullscreen-img" src="" alt="Memory" />
+      <div class="fullscreen-info">
+        <div class="fullscreen-mood" id="fs-mood"></div>
+        <div class="fullscreen-note" id="fs-note"></div>
+        <div class="fullscreen-date" id="fs-date"></div>
+      </div>
+    </div>
+
+    <!-- Add Memory Sheet -->
+    <div class="add-memory-overlay" id="add-memory-overlay">
+      <div class="add-memory-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">New Memory 📸</div>
+        <div class="form-group">
+          <div class="photo-upload" onclick="document.getElementById('memory-image-input').click()">
+            <div class="photo-upload-icon">📷</div>
+            <div class="photo-upload-text">Tap to upload photo</div>
+            <input type="file" id="memory-image-input" accept="image/*" style="display:none"
+              onchange="previewImage(event)">
+          </div>
+
+          <img id="image-preview" style="width:100%;margin-top:10px;border-radius:10px;display:none;" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your Story</label>
+          <textarea class="form-input" rows="3" placeholder="What happened here? How did it feel?"
+            id="memory-note-input" style="resize:none;line-height:1.6"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mood</label>
+          <div class="chip-row" id="mood-chips">
+            <div class="chip selected" onclick="selectChip(this)">😌 Blissful</div>
+            <div class="chip" onclick="selectChip(this)">😄 Adventurous</div>
+            <div class="chip" onclick="selectChip(this)">🌊 Peaceful</div>
+            <div class="chip" onclick="selectChip(this)">😴 Tired but Happy</div>
+          </div>
+        </div>
+        <button class="submit-btn" onclick="saveMemory()">Save Memory ✨</button>
+        <button onclick="closeAddMemory()"
+          style="width:100%;background:transparent;border:none;color:var(--muted);padding:14px;cursor:pointer;font-size:14px;font-family:'DM Sans',sans-serif">Cancel</button>
+      </div>
+    </div>
+
+    <script>
+
+      let profileImage = '';
+
+      // Toggle dropdown (click based)
+      function toggleDropdown(e) {
+        e.stopPropagation();
+        document.getElementById("user-dropdown").classList.toggle("show");
+      }
+      function openProfileEdit() {
+        document.getElementById("profile-modal").classList.add("visible");
+      }
+      // Close dropdown on outside click
+      document.addEventListener("click", function (e) {
+        const wrapper = document.querySelector(".avatar-wrapper");
+        if (wrapper && !wrapper.contains(e.target)) {
+          document.getElementById("user-dropdown").classList.remove("show");
+        }
+      });
+
+      // Open modal
+      function openProfile() {
+        document.getElementById("profile-modal").classList.add("visible");
+        document.getElementById("user-dropdown").classList.remove("show");
+      }
+
+      // Close modal
+      function closeProfile() {
+        document.getElementById("profile-modal").classList.remove("visible");
+      }
+
+      // Preview uploaded image
+      function previewProfile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const img = document.getElementById("profile-preview");
+          img.src = e.target.result;
+          img.style.display = "block";
+        };
+        reader.readAsDataURL(file);
+      }
+      // Save profile
+      function saveProfile() {
+        event.preventDefault();
+        const name = document.getElementById("profile-name-input").value;
+        const email = document.getElementById("profile-email-input").value;
+        const img = document.getElementById("profile-preview").src;
+
+        // Set name & email in dropdown
+        document.getElementById("profile-name").innerText = name;
+        document.getElementById("profile-email").innerText = email;
+
+        // Set avatar image OR first letter
+        const avatar = document.getElementById("avatar");
+
+        if (img && img !== window.location.href) {
+          avatar.innerHTML = `<img src="${img}" style="width:100%;height:100%;border-radius:50%">`;
+        } else {
+          avatar.innerText = name.charAt(0).toUpperCase();
+        }
+
+        document.getElementById("profile-modal").classList.remove("visible");
+      }
+
+      document.getElementById('profile-modal').addEventListener('click', function (e) {
+        if (e.target === this) closeProfile();
+      });
+      // load destination
+      function loadDestinations() {
+        const grid = document.getElementById('dest-grid');
+        const cards = document.querySelectorAll('#dest-scroll .dest-card');
+
+        grid.innerHTML = '';
+
+        cards.forEach(card => {
+          const clone = card.cloneNode(true);
+          clone.style.height = '200px';
+          grid.appendChild(clone);
+        });
+      }
+      // ===== NAVIGATION =====
+      let currentScreen = 'home';
+      // const screens = ['home', 'trips', 'budget', 'journal', 'itinerary'];
+      const screens = ['home', 'trips', 'budget', 'journal', 'itinerary', 'destinations'];
+
+      function navigate(screen) {
+        screens.forEach(s => {
+          document.getElementById('screen-' + s).classList.remove('active');
+        });
+
+        document.getElementById('screen-' + screen).classList.add('active');
+        currentScreen = screen;
+
+        if (screen === 'destinations') {
+          loadDestinations();
+        }
+        document.querySelector('#screen-' + screen).scrollTop = 0;
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+      }
+      // Initial FAB state
+      document.getElementById('budget-fab').style.display = 'none';
+      document.getElementById('journal-fab').style.display = 'none';
+
+      // ===== COUNTDOWN =====
+      function updateCountdown() {
+        const target = new Date('2026-06-14');
+        const now = new Date();
+        const diff = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+        document.getElementById('countdown-num').textContent = Math.max(0, diff);
+      }
+      updateCountdown();
+
+      // ===== ACCORDION =====
+      function toggleDay(header) {
+        const arrow = header.querySelector('.day-arrow');
+        const body = header.nextElementSibling;
+        const isOpen = body.classList.contains('open');
+        body.classList.toggle('open', !isOpen);
+        arrow.classList.toggle('open', !isOpen);
+        header.classList.toggle('open', !isOpen);
+      }
+
+      // ===== MAP / LIST TOGGLE =====
+      function switchView(view) {
+        document.getElementById('list-view').style.display = view === 'list' ? 'block' : 'none';
+        document.getElementById('map-view').style.display = view === 'map' ? 'block' : 'none';
+        document.getElementById('list-toggle').classList.toggle('active', view === 'list');
+        document.getElementById('map-toggle').classList.toggle('active', view === 'map');
+      }
+
+      // ===== NEW TRIP SHEET =====
+      let travelerCount = 2;
+
+      function openNewTrip() {
+        document.getElementById('sheet-overlay').classList.add('visible');
+        document.getElementById('new-trip-sheet').classList.add('visible');
+      }
+
+      function closeNewTrip() {
+        document.getElementById('sheet-overlay').classList.remove('visible');
+        document.getElementById('new-trip-sheet').classList.remove('visible');
+      }
+
+      function changeCount(delta) {
+        travelerCount = Math.max(1, Math.min(20, travelerCount + delta));
+        document.getElementById('traveler-count').textContent = travelerCount;
+      }
+
+      function selectChip(chip) {
+        const parent = chip.parentElement;
+        parent.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+      }
+
+      const styleTagMap = { Adventure: 'tag-adventure', Luxury: 'tag-luxury', Beach: 'tag-beach', Cultural: 'tag-cultural' };
+      const emojis = { Adventure: '🧗', Luxury: '💎', Beach: '🏖️', Cultural: '🏛️' };
+      const imgs = {
+        Adventure: 'https://images.unsplash.com/photo-1551632811-561732d1e306?w=600&q=80',
+        Luxury: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&q=80',
+        Beach: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&q=80',
+        Cultural: 'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=600&q=80'
+      };
+
+      function addTrip() {
+        const dest = document.getElementById('dest-input').value.trim();
+        const start = document.getElementById('start-date').value;
+        const end = document.getElementById('end-date').value;
+        const style = document.querySelector('#chip-row .chip.selected')?.textContent || 'Adventure';
+        if (!dest) { showToast('Enter a destination!'); return; }
+
+        const card = document.createElement('div');
+        card.className = 'trip-card glass';
+        card.style.overflow = 'hidden';
+        const img = imgs[style] || imgs.Adventure;
+        const tag = styleTagMap[style] || 'tag-adventure';
+        const startFmt = start ? new Date(start).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD';
+        const endFmt = end ? new Date(end).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD';
+        card.innerHTML = `
+    <img class="trip-card-img" src="${img}" alt="${dest}"/>
+    <div class="trip-card-body">
+      <div class="trip-card-top">
+        <div class="trip-name">${dest}</div>
+        <div class="trip-style-tag ${tag}">${style}</div>
+      </div>
+      <div class="trip-dates">📅 ${startFmt} – ${endFmt}</div>
+      <div class="trip-meta"><span>👥 ${travelerCount} travelers</span><span>·</span><span>${emojis[style]} ${style}</span></div>
+    </div>
+  `;
+        document.getElementById('trips-list').prepend(card);
+        closeNewTrip();
+        document.getElementById('dest-input').value = '';
+        showToast('Trip created! 🗺️');
+        updateStats();
+      }
+
+      // ===== EXPENSE MODAL =====
+      let totalSpent = 112500;
+      const totalBudget = 180000;
+
+      let categoryTotals = {
+        Food: 28125,
+        Accommodation: 39375,
+        Transport: 16875,
+        Activities: 20250,
+        Shopping: 7875
+      };
+
+
+      function openExpenseModal() {
+        document.getElementById('expense-modal').classList.add('visible');
+      }
+      function closeExpenseModal() {
+        document.getElementById('expense-modal').classList.remove('visible');
+      }
+
+      const catIcons = { Food: '🍽️', Accommodation: '🏨', Transport: '✈️', Activities: '🎭', Shopping: '🛍️' };
+      const catColors = { Food: 'rgba(93,173,226,0.15)', Accommodation: 'rgba(200,150,62,0.15)', Transport: 'rgba(46,204,113,0.15)', Activities: 'rgba(187,143,206,0.15)', Shopping: 'rgba(231,76,60,0.15)' };
+
+      function addExpense() {
+        const amt = parseInt(document.getElementById('expense-amount').value);
+        const cat = document.getElementById('expense-category').value;
+        const note = document.getElementById('expense-note').value.trim() || 'New expense';
+
+        if (!amt || amt <= 0) { showToast('Enter a valid amount!'); return; }
+
+        totalSpent += amt;
+        categoryTotals[cat] += amt;
+
+        // ✅ update UI everywhere
+        updateBudgetUI();
+        const remaining = totalBudget - totalSpent;
+
+        document.getElementById('total-spent').textContent = '₹' + totalSpent.toLocaleString('en-IN');
+        const remEl = document.getElementById('remaining');
+        remEl.textContent = (remaining >= 0 ? '₹' : '-₹') + Math.abs(remaining).toLocaleString('en-IN');
+        remEl.className = 'bsum-value ' + (remaining >= 0 ? 'success' : 'danger');
+
+        const today = new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        const item = document.createElement('div');
+        item.className = 'expense-item glass';
+        item.innerHTML = `
+    <div class="expense-icon" style="background:${catColors[cat]}">${catIcons[cat]}</div>
+    <div class="expense-info">
+      <div class="expense-name">${note}</div>
+      <div class="expense-meta">${today} · ${cat}</div>
+    </div>
+    <div class="expense-amount">₹${amt.toLocaleString('en-IN')}</div>
+  `;
+        document.getElementById('expense-list').prepend(item);
+        closeExpenseModal();
+        document.getElementById('expense-amount').value = '';
+        document.getElementById('expense-note').value = '';
+        showToast('Expense added! 💸');
+        updateStats();
+      }
+
+
+      function updateBudgetUI() {
+
+        const totalSpentEl = document.getElementById("total-spent");
+        const remainingEl = document.getElementById("remaining");
+
+        // Update summary
+        totalSpentEl.textContent = '₹' + totalSpent.toLocaleString('en-IN');
+
+        const remaining = totalBudget - totalSpent;
+        remainingEl.textContent =
+          (remaining >= 0 ? '₹' : '-₹') + Math.abs(remaining).toLocaleString('en-IN');
+
+        // 🔹 Update percentage
+        const percent = Math.round((totalSpent / totalBudget) * 100);
+        document.querySelector(".donut-center-pct").textContent = percent + "%";
+
+        // 🔹 Update legend amounts
+        const legendItems = document.querySelectorAll(".legend-item");
+
+        const categories = ["Accommodation", "Food", "Transport", "Activities", "Shopping"];
+
+        legendItems.forEach((item, i) => {
+          const cat = categories[i];
+          item.querySelector(".legend-amount").textContent =
+            '₹' + categoryTotals[cat].toLocaleString('en-IN');
+        });
+
+        // 🔹 Update donut chart
+        const total = totalSpent;
+
+        const percents = categories.map(cat =>
+          Math.round((categoryTotals[cat] / total) * 100)
+        );
+
+        const circles = document.querySelectorAll("svg circle");
+
+        let offset = 0;
+
+        circles.forEach((circle, i) => {
+          const p = percents[i] || 0;
+          circle.setAttribute("stroke-dasharray", `${p} ${100 - p}`);
+          circle.setAttribute("stroke-dashoffset", -offset);
+          offset += p;
+        });
+      }
+      // ===== JOURNAL =====
+      const memories = [
+        { img: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800&q=80', mood: '😌 Blissful', note: 'Watching the sun melt into the caldera from our terrace. Pure magic. The sky turned every shade of pink and orange imaginable.', date: 'June 14, 2026' },
+        { img: 'https://images.unsplash.com/photo-1555993539-1732b0258235?w=800&q=80', mood: '😄 Adventurous', note: 'Tried every mezze on the menu at Metaxy Mas. The octopus was incredible — grilled perfectly with lemon and olive oil.', date: 'June 14, 2026' },
+        { img: 'https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=800&q=80', mood: '🌊 Peaceful', note: 'Sailing at dusk on the catamaran. The sky turned three shades of orange and we swam in the volcanic hot springs.', date: 'June 15, 2026' },
+        { img: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&q=80', mood: '😴 Tired but Happy', note: '10,000+ steps through Oia\'s winding lanes. My feet ache but every single photo is a masterpiece.', date: 'June 15, 2026' }
+      ];
+
+      function openMemory(i) {
+        const m = memories[i];
+        document.getElementById('fs-img').src = m.img;
+        document.getElementById('fs-mood').textContent = m.mood;
+        document.getElementById('fs-note').textContent = m.note;
+        document.getElementById('fs-date').textContent = '📅 ' + m.date;
+        document.getElementById('memory-fullscreen').classList.add('visible');
+      }
+      function closeMemory() {
+        document.getElementById('memory-fullscreen').classList.remove('visible');
+      }
+
+      function openAddMemory() {
+        document.getElementById('add-memory-overlay').classList.add('visible');
+      }
+      function closeAddMemory() {
+        document.getElementById('add-memory-overlay').classList.remove('visible');
+      }
+
+      // upload photo
+      let uploadedImage = '';
+
+      function previewImage(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          uploadedImage = e.target.result;
+
+          const preview = document.getElementById('image-preview');
+          preview.src = uploadedImage;
+          preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+      function saveMemory() {
+        const note = document.getElementById('memory-note-input').value.trim();
+        const mood = document.querySelector('#mood-chips .chip.selected')?.textContent || '😌 Blissful';
+        if (!note) { showToast('Write a memory first!'); return; }
+
+        const idx = memories.length;
+        const imgs = [
+          'https://images.unsplash.com/photo-1503220317375-aaad61436b1b?w=400&q=80',
+          'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400&q=80'
+        ];
+        const img = uploadedImage || imgs[idx % 2];
+        const heights = ['180px', '200px', '160px', '190px'];
+        const h = heights[idx % 4];
+        const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+        memories.push({ img, mood, note, date: today });
+        const card = document.createElement('div');
+        card.className = 'memory-card';
+        card.onclick = () => openMemory(idx);
+        card.innerHTML = `
+    <img class="memory-img" src="${img}" alt="Memory" style="height:${h}"/>
+    <div class="memory-overlay"></div>
+    <div class="memory-content">
+      <div class="mood-tag">${mood}</div>
+      <div class="memory-note">${note.substring(0, 60)}${note.length > 60 ? '...' : ''}</div>
+      <div class="memory-date">${today}</div>
+    </div>
+  `;
+        document.getElementById('masonry-grid').appendChild(card);
+        closeAddMemory();
+        document.getElementById('memory-note-input').value = '';
+        showToast('Memory saved! 📸');
+        uploadedImage = '';
+        document.getElementById('image-preview').style.display = 'none';
+        document.getElementById('memory-image-input').value = '';
+        updateStats();
+      }
+
+      // ===== TOAST =====
+      function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('visible');
+        setTimeout(() => t.classList.remove('visible'), 2500);
+      }
+
+      // Close modals on overlay click
+      document.getElementById('expense-modal').addEventListener('click', function (e) {
+        if (e.target === this) closeExpenseModal();
+      });
+      document.getElementById('add-memory-overlay').addEventListener('click', function (e) {
+        if (e.target === this) closeAddMemory();
+      });
+
+      // Slider scroll
+      function scrollDest(direction) {
+        const container = document.getElementById('dest-scroll');
+        const cardWidth = container.querySelector('.dest-card').offsetWidth + 12;
+        container.scrollBy({ left: direction * cardWidth, behavior: 'smooth' });
+      }
+
+      // Auto slide (optional)
+      setInterval(() => {
+        if (currentScreen === 'home') {
+          scrollDest(1);
+        }
+      }, 4000);
+
+      // See all destinations
+      function openAllDestinations() {
+        navigate('destinations');
+
+        const grid = document.getElementById('dest-grid');
+        const cards = document.querySelectorAll('#dest-scroll .dest-card');
+
+        grid.innerHTML = '';
+        cards.forEach(card => {
+          const clone = card.cloneNode(true);
+          clone.style.height = '200px';
+          grid.appendChild(clone);
+        });
+      }
+      const slider = document.getElementById('dest-scroll');
+
+      let isDown = false;
+      let startX;
+      let scrollLeft;
+
+      slider.addEventListener('mousedown', (e) => {
+        isDown = true;
+        slider.classList.add('active');
+        startX = e.pageX - slider.offsetLeft;
+        scrollLeft = slider.scrollLeft;
+      });
+
+      slider.addEventListener('mouseleave', () => {
+        isDown = false;
+      });
+
+      slider.addEventListener('mouseup', () => {
+        isDown = false;
+      });
+
+      slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - slider.offsetLeft;
+        const walk = (x - startX) * 1.5; // speed
+        slider.scrollLeft = scrollLeft - walk;
+      });
+      // mobile swipe
+      let startTouchX = 0;
+      let scrollStart = 0;
+
+      slider.addEventListener('touchstart', (e) => {
+        startTouchX = e.touches[0].pageX;
+        scrollStart = slider.scrollLeft;
+      });
+
+      slider.addEventListener('touchmove', (e) => {
+        const x = e.touches[0].pageX;
+        const walk = (x - startTouchX) * 1.5;
+        slider.scrollLeft = scrollStart - walk;
+      });
+
+
+      // add activity
+      let currentDayContainer = null;
+
+      function openActivityModal(btn) {
+        currentDayContainer = btn.closest('.day-body-inner');
+        document.getElementById('activity-modal').classList.add('visible');
+      }
+
+      function closeActivityModal() {
+        document.getElementById('activity-modal').classList.remove('visible');
+      }
+
+      function addActivity() {
+        const time = document.getElementById('activity-time').value;
+        const name = document.getElementById('activity-name').value.trim();
+        const note = document.getElementById('activity-note').value.trim();
+
+        if (!name) {
+          showToast('Enter activity name!');
+          return;
+        }
+
+        const activity = document.createElement('div');
+        activity.className = 'activity-card';
+
+        activity.innerHTML = `
+    <div class="activity-icon icon-sight">📍</div>
+    <div class="activity-info">
+      <div class="activity-time">${time || 'Anytime'}</div>
+      <div class="activity-name">${name}</div>
+      <div class="activity-note">${note || ''}</div>
+    </div>
+  `;
+
+        // Insert before button
+        currentDayContainer.insertBefore(
+          activity,
+          currentDayContainer.querySelector('.add-activity-btn')
+        );
+
+        // ✅ UPDATE COUNT HERE
+        updateActivityCount(currentDayContainer);
+
+        closeActivityModal();
+
+        document.getElementById('activity-time').value = '';
+        document.getElementById('activity-name').value = '';
+        document.getElementById('activity-note').value = '';
+
+        showToast('Activity added! 🗓️');
+
+        function updateActivityCount(dayContainer) {
+          const activities = dayContainer.querySelectorAll('.activity-card').length;
+
+          const header = dayContainer.closest('.accordion-day').querySelector('.day-header');
+          const subtitle = header.querySelector('.day-subtitle');
+
+          // keep existing text after dot
+          const textParts = subtitle.textContent.split('·');
+          const suffix = textParts[1] ? textParts[1].trim() : '';
+
+          subtitle.textContent = `${activities} activities${suffix ? ' · ' + suffix : ''}`;
+        }
+
+      }
+      function updateStats() {
+        // Trips count
+        const trips = document.querySelectorAll('#trips-list .trip-card').length;
+
+        // Countries (extract from trip-meta)
+        const countryElements = document.querySelectorAll('#trips-list .trip-meta span:nth-child(3)');
+        const countries = new Set();
+
+        countryElements.forEach(el => {
+          countries.add(el.textContent.trim());
+        });
+
+        // Memories
+        const memoriesCount = document.querySelectorAll('#masonry-grid .memory-card').length;
+
+        // Budget (use your variable)
+        const budget = totalBudget || 0;
+
+        // Update UI
+        document.getElementById('stat-trips').textContent = trips;
+        document.getElementById('stat-countries').textContent = countries.size;
+        document.getElementById('stat-memories').textContent = memoriesCount;
+        document.getElementById('stat-budget').textContent = '₹' + (budget / 100000).toFixed(1) + 'L';
+      }
+      document.addEventListener("DOMContentLoaded", () => {
+        updateStats();
+      });
+      if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual';
+}
+      window.addEventListener("load", () => {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+      });
+
+    </script>
+</body>
+
+</html>
