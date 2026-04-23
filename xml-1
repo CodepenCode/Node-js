@@ -1,0 +1,701 @@
+------------chatgpt -1
+exports.signXml = (
+    xml,
+    privateKeyPem,
+    certBase64,
+    certPem,
+    certObj,
+    certDigest,
+    invoiceId,
+    recordType
+) => {
+    try {
+        if (!xml || !privateKeyPem || !certBase64 || !certObj || !invoiceId) {
+            return { status: 0, data: null, message: "Missing required parameters" };
+        }
+
+        if (!certDigest) {
+            return { status: 0, data: null, message: "Certificate digest missing" };
+        }
+
+        const DOC_ID = `INV-${invoiceId}`;
+        const signatureId = `SIG-${Date.now()}-${invoiceId}`;
+        const signedPropertiesId = `SP-${Date.now()}-${invoiceId}`;
+        const signingTime = new Date().toISOString();
+
+        // ───────── NORMALIZE XML (SET SINGLE ID) ─────────
+        let xmlNorm = xml;
+
+        // Remove any existing Id attributes
+        xmlNorm = xmlNorm.replace(/\sId=".*?"/g, "");
+
+        if (recordType === RECORD_TYPE["NO_VERIFACTU"]) {
+            xmlNorm = xmlNorm.replace(
+                "<RegistroFactura",
+                `<RegistroFactura Id="${DOC_ID}"`
+            );
+        } else {
+            xmlNorm = xmlNorm.replace(
+                "<fe:Facturae",
+                `<fe:Facturae Id="${DOC_ID}"`
+            );
+        }
+
+        // ───────── CERT DETAILS ─────────
+        const issuerName = certObj.issuer.attributes
+            .map(attr => `${attr.shortName || attr.name}=${attr.value}`)
+            .join(",");
+
+        const serialNumber = BigInt("0x" + certObj.serialNumber).toString();
+
+        // ───────── BUILD SIGNATURE XML ─────────
+        const buildSignatureXml = (d1 = "", d2 = "", sv = "") => `
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+              xmlns:xades="http://uri.etsi.org/01903/v1.3.2#"
+              Id="${signatureId}">
+
+  <ds:SignedInfo>
+    <ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+    <ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
+
+    <ds:Reference URI="#${DOC_ID}">
+      <ds:Transforms>
+        <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+        <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+      </ds:Transforms>
+      <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+      <ds:DigestValue>${d1}</ds:DigestValue>
+    </ds:Reference>
+
+    <ds:Reference URI="#${signedPropertiesId}" Type="http://uri.etsi.org/01903#SignedProperties">
+      <ds:Transforms>
+        <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+      </ds:Transforms>
+      <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+      <ds:DigestValue>${d2}</ds:DigestValue>
+    </ds:Reference>
+  </ds:SignedInfo>
+
+  <ds:SignatureValue>${sv}</ds:SignatureValue>
+
+  <ds:KeyInfo>
+    <ds:X509Data>
+      <ds:X509Certificate>${certBase64}</ds:X509Certificate>
+    </ds:X509Data>
+  </ds:KeyInfo>
+
+  <ds:Object>
+    <xades:QualifyingProperties Target="#${signatureId}">
+      <xades:SignedProperties Id="${signedPropertiesId}">
+        <xades:SignedSignatureProperties>
+
+          <xades:SigningTime>${signingTime}</xades:SigningTime>
+
+          <xades:SigningCertificate>
+            <xades:Cert>
+              <xades:CertDigest>
+                <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                <ds:DigestValue>${certDigest}</ds:DigestValue>
+              </xades:CertDigest>
+
+              <xades:IssuerSerial>
+                <ds:X509IssuerName>${issuerName}</ds:X509IssuerName>
+                <ds:X509SerialNumber>${serialNumber}</ds:X509SerialNumber>
+              </xades:IssuerSerial>
+
+            </xades:Cert>
+          </xades:SigningCertificate>
+
+        </xades:SignedSignatureProperties>
+      </xades:SignedProperties>
+    </xades:QualifyingProperties>
+  </ds:Object>
+
+</ds:Signature>`;
+
+        const insertSignature = (xmlStr, signatureXml) => {
+            if (xmlStr.includes("</RegistroFactura>")) {
+                return xmlStr.replace("</RegistroFactura>", signatureXml + "\n</RegistroFactura>");
+            }
+            return xmlStr.replace("</fe:Facturae>", signatureXml + "\n</fe:Facturae>");
+        };
+
+        // ───────── STEP 1: DIGEST DOCUMENT ─────────
+        let doc1 = new DOMParser().parseFromString(xmlNorm, "text/xml");
+
+        const sigNode = xpath(doc1, "//*[local-name()='Signature']")[0];
+        if (sigNode) sigNode.parentNode.removeChild(sigNode);
+
+        const canonicalDoc = new ExclusiveCanonicalization().process(doc1.documentElement);
+        const digest1 = crypto.createHash("sha256").update(Buffer.from(canonicalDoc)).digest("base64");
+
+        // ───────── STEP 2: DIGEST SIGNED PROPERTIES ─────────
+        let tempXml = insertSignature(xmlNorm, buildSignatureXml(digest1, "", ""));
+        let doc2 = new DOMParser().parseFromString(tempXml, "text/xml");
+
+        const spNode = xpath(doc2, "//*[local-name()='SignedProperties']")[0];
+        const canonicalSP = new ExclusiveCanonicalization().process(spNode);
+        const digest2 = crypto.createHash("sha256").update(Buffer.from(canonicalSP)).digest("base64");
+
+        // ───────── STEP 3: SIGN SIGNEDINFO ─────────
+        tempXml = insertSignature(xmlNorm, buildSignatureXml(digest1, digest2, ""));
+        let doc3 = new DOMParser().parseFromString(tempXml, "text/xml");
+
+        const siNode = xpath(doc3, "//*[local-name()='SignedInfo']")[0];
+        const canonicalSI = new ExclusiveCanonicalization().process(siNode);
+
+        const signatureValue = crypto
+            .createSign("RSA-SHA256")
+            .update(Buffer.from(canonicalSI))
+            .sign(privateKeyPem, "base64");
+
+        // ───────── FINAL XML ─────────
+        const finalXml = insertSignature(
+            xmlNorm,
+            buildSignatureXml(digest1, digest2, signatureValue)
+        );
+
+        return {
+            status: 1,
+            data: finalXml,
+            message: "XML signed successfully"
+        };
+
+    } catch (error) {
+        return {
+            status: 0,
+            data: null,
+            message: error.message
+        };
+    }
+};
+
+-------chatgpt -2
+exports.signXml = (
+    xml,
+    privateKeyPem,
+    certBase64,
+    certPem,
+    certObj,
+    certDigest,
+    invoiceId,
+    recordType
+) => {
+    try {
+        if (!xml || !privateKeyPem || !certBase64 || !certObj || !invoiceId) {
+            return { status: 0, data: null, message: "Missing required parameters" };
+        }
+
+        if (!certDigest) {
+            return { status: 0, data: null, message: "Certificate digest missing" };
+        }
+
+        const DOC_ID = `INV-${invoiceId}`;
+        const signatureId = `SIG-${Date.now()}-${invoiceId}`;
+        const signedPropertiesId = `SP-${Date.now()}-${invoiceId}`;
+        const signingTime = new Date().toISOString();
+
+        // ───────── NORMALIZE XML (SET SINGLE ID) ─────────
+        let xmlNorm = xml;
+
+        // Remove any existing Id attributes
+        xmlNorm = xmlNorm.replace(/\sId=".*?"/g, "");
+
+        if (recordType === RECORD_TYPE["NO_VERIFACTU"]) {
+            xmlNorm = xmlNorm.replace(
+                "<RegistroFactura",
+                `<RegistroFactura Id="${DOC_ID}"`
+            );
+        } else {
+            xmlNorm = xmlNorm.replace(
+                "<fe:Facturae",
+                `<fe:Facturae Id="${DOC_ID}"`
+            );
+        }
+
+        // ───────── CERT DETAILS ─────────
+        const issuerName = certObj.issuer.attributes
+            .map(attr => `${attr.shortName || attr.name}=${attr.value}`)
+            .join(",");
+
+        const serialNumber = BigInt("0x" + certObj.serialNumber).toString();
+
+        // ───────── BUILD SIGNATURE XML ─────────
+        const buildSignatureXml = (d1 = "", d2 = "", sv = "") => `
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+              xmlns:xades="http://uri.etsi.org/01903/v1.3.2#"
+              Id="${signatureId}">
+
+  <ds:SignedInfo>
+    <ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+    <ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
+
+    <ds:Reference URI="#${DOC_ID}">
+      <ds:Transforms>
+        <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+        <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+      </ds:Transforms>
+      <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+      <ds:DigestValue>${d1}</ds:DigestValue>
+    </ds:Reference>
+
+    <ds:Reference URI="#${signedPropertiesId}" Type="http://uri.etsi.org/01903#SignedProperties">
+      <ds:Transforms>
+        <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+      </ds:Transforms>
+      <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+      <ds:DigestValue>${d2}</ds:DigestValue>
+    </ds:Reference>
+  </ds:SignedInfo>
+
+  <ds:SignatureValue>${sv}</ds:SignatureValue>
+
+  <ds:KeyInfo>
+    <ds:X509Data>
+      <ds:X509Certificate>${certBase64}</ds:X509Certificate>
+    </ds:X509Data>
+  </ds:KeyInfo>
+
+  <ds:Object>
+    <xades:QualifyingProperties Target="#${signatureId}">
+      <xades:SignedProperties Id="${signedPropertiesId}">
+        <xades:SignedSignatureProperties>
+
+          <xades:SigningTime>${signingTime}</xades:SigningTime>
+
+          <xades:SigningCertificate>
+            <xades:Cert>
+              <xades:CertDigest>
+                <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                <ds:DigestValue>${certDigest}</ds:DigestValue>
+              </xades:CertDigest>
+
+              <xades:IssuerSerial>
+                <ds:X509IssuerName>${issuerName}</ds:X509IssuerName>
+                <ds:X509SerialNumber>${serialNumber}</ds:X509SerialNumber>
+              </xades:IssuerSerial>
+
+            </xades:Cert>
+          </xades:SigningCertificate>
+
+        </xades:SignedSignatureProperties>
+      </xades:SignedProperties>
+    </xades:QualifyingProperties>
+  </ds:Object>
+
+</ds:Signature>`;
+
+        const insertSignature = (xmlStr, signatureXml) => {
+            if (xmlStr.includes("</RegistroFactura>")) {
+                return xmlStr.replace("</RegistroFactura>", signatureXml + "\n</RegistroFactura>");
+            }
+            return xmlStr.replace("</fe:Facturae>", signatureXml + "\n</fe:Facturae>");
+        };
+
+        // ───────── STEP 1: DIGEST DOCUMENT ─────────
+        let doc1 = new DOMParser().parseFromString(xmlNorm, "text/xml");
+
+        const sigNode = xpath(doc1, "//*[local-name()='Signature']")[0];
+        if (sigNode) sigNode.parentNode.removeChild(sigNode);
+
+        const canonicalDoc = new ExclusiveCanonicalization().process(doc1.documentElement);
+        const digest1 = crypto.createHash("sha256").update(Buffer.from(canonicalDoc)).digest("base64");
+
+        // ───────── STEP 2: DIGEST SIGNED PROPERTIES ─────────
+        let tempXml = insertSignature(xmlNorm, buildSignatureXml(digest1, "", ""));
+        let doc2 = new DOMParser().parseFromString(tempXml, "text/xml");
+
+        const spNode = xpath(doc2, "//*[local-name()='SignedProperties']")[0];
+        const canonicalSP = new ExclusiveCanonicalization().process(spNode);
+        const digest2 = crypto.createHash("sha256").update(Buffer.from(canonicalSP)).digest("base64");
+
+        // ───────── STEP 3: SIGN SIGNEDINFO ─────────
+        tempXml = insertSignature(xmlNorm, buildSignatureXml(digest1, digest2, ""));
+        let doc3 = new DOMParser().parseFromString(tempXml, "text/xml");
+
+        const siNode = xpath(doc3, "//*[local-name()='SignedInfo']")[0];
+        const canonicalSI = new ExclusiveCanonicalization().process(siNode);
+
+        const signatureValue = crypto
+            .createSign("RSA-SHA256")
+            .update(Buffer.from(canonicalSI))
+            .sign(privateKeyPem, "base64");
+
+        // ───────── FINAL XML ─────────
+        const finalXml = insertSignature(
+            xmlNorm,
+            buildSignatureXml(digest1, digest2, signatureValue)
+        );
+
+        return {
+            status: 1,
+            data: finalXml,
+            message: "XML signed successfully"
+        };
+
+    } catch (error) {
+        return {
+            status: 0,
+            data: null,
+            message: error.message
+        };
+    }
+};
+-------------chatgpt-3
+exports.signXml = (
+    xml,
+    privateKeyPem,
+    certBase64,
+    certPem,
+    certObj,
+    certDigest,
+    invoiceId,
+    recordType
+) => {
+    try {
+        if (!xml || !privateKeyPem || !certBase64 || !certObj || !invoiceId) {
+            return { status: 0, data: null, message: "Missing required parameters" };
+        }
+
+        if (!certDigest) {
+            return { status: 0, data: null, message: "Certificate digest missing" };
+        }
+
+        const DOC_ID = `INV-${invoiceId}`;
+        const signatureId = `SIG-${Date.now()}-${invoiceId}`;
+        const signedPropertiesId = `SP-${Date.now()}-${invoiceId}`;
+        const signingTime = new Date().toISOString();
+
+        // ───────── NORMALIZE XML (SET SINGLE ID) ─────────
+        let xmlNorm = xml;
+
+        // remove existing Ids
+        xmlNorm = xmlNorm.replace(/Id=".*?"/g, "");
+
+        if (recordType === RECORD_TYPE["NO_VERIFACTU"]) {
+            xmlNorm = xmlNorm.replace(
+                "<RegistroFactura",
+                `<RegistroFactura Id="${DOC_ID}"`
+            );
+        } else {
+            xmlNorm = xmlNorm.replace(
+                "<fe:Facturae",
+                `<fe:Facturae Id="${DOC_ID}"`
+            );
+        }
+
+        // ───────── CERT DETAILS ─────────
+        const issuerName = certObj.issuer.attributes
+            .map(attr => `${attr.shortName || attr.name}=${attr.value}`)
+            .join(",");
+
+        const serialNumber = BigInt("0x" + certObj.serialNumber).toString();
+
+        // ───────── BUILD SIGNATURE XML ─────────
+        const buildFullXml = (d1 = "", d2 = "", sv = "") => {
+            const signatureXml = `
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+              xmlns:xades="http://uri.etsi.org/01903/v1.3.2#"
+              Id="${signatureId}">
+  <ds:SignedInfo>
+    <ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+    <ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
+
+    <ds:Reference URI="#${DOC_ID}">
+      <ds:Transforms>
+        <ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+        <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+      </ds:Transforms>
+      <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+      <ds:DigestValue>${d1}</ds:DigestValue>
+    </ds:Reference>
+
+    <ds:Reference URI="#${signedPropertiesId}" Type="http://uri.etsi.org/01903#SignedProperties">
+      <ds:Transforms>
+        <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+      </ds:Transforms>
+      <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+      <ds:DigestValue>${d2}</ds:DigestValue>
+    </ds:Reference>
+  </ds:SignedInfo>
+
+  <ds:SignatureValue>${sv}</ds:SignatureValue>
+
+  <ds:KeyInfo>
+    <ds:X509Data>
+      <ds:X509Certificate>${certBase64}</ds:X509Certificate>
+    </ds:X509Data>
+  </ds:KeyInfo>
+
+  <ds:Object>
+    <xades:QualifyingProperties Target="#${signatureId}">
+      <xades:SignedProperties Id="${signedPropertiesId}">
+        <xades:SignedSignatureProperties>
+
+          <xades:SigningTime>${signingTime}</xades:SigningTime>
+
+          <xades:SigningCertificate>
+            <xades:Cert>
+              <xades:CertDigest>
+                <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                <ds:DigestValue>${certDigest}</ds:DigestValue>
+              </xades:CertDigest>
+
+              <xades:IssuerSerial>
+                <ds:X509IssuerName>${issuerName}</ds:X509IssuerName>
+                <ds:X509SerialNumber>${serialNumber}</ds:X509SerialNumber>
+              </xades:IssuerSerial>
+            </xades:Cert>
+          </xades:SigningCertificate>
+
+        </xades:SignedSignatureProperties>
+      </xades:SignedProperties>
+    </xades:QualifyingProperties>
+  </ds:Object>
+</ds:Signature>`;
+
+            return xmlNorm.replace(
+                "</RegistroFactura>",
+                signatureXml + "\n</RegistroFactura>"
+            ).replace(
+                "</fe:Facturae>",
+                signatureXml + "\n</fe:Facturae>"
+            );
+        };
+
+        // ───────── STEP 1: DIGEST OF DOCUMENT ─────────
+        const doc1 = new DOMParser().parseFromString(xmlNorm, "text/xml");
+
+        const sigNode = xpath(doc1, "//*[local-name()='Signature']")[0];
+        if (sigNode) sigNode.parentNode.removeChild(sigNode);
+
+        const canonicalXml = canonicalize(doc1.documentElement);
+        const digest1 = sha256b64(Buffer.from(canonicalXml));
+
+        // ───────── STEP 2: DIGEST OF SIGNED PROPERTIES ─────────
+        const tempXml = buildFullXml(digest1, "", "");
+        const doc2 = new DOMParser().parseFromString(tempXml, "text/xml");
+
+        const spNode = xpath(doc2, "//*[local-name()='SignedProperties']")[0];
+        const canonicalSP = canonicalize(spNode);
+        const digest2 = sha256b64(Buffer.from(canonicalSP));
+
+        // ───────── STEP 3: SIGN SIGNEDINFO ─────────
+        const finalXmlTemp = buildFullXml(digest1, digest2, "");
+        const doc3 = new DOMParser().parseFromString(finalXmlTemp, "text/xml");
+
+        const siNode = xpath(doc3, "//*[local-name()='SignedInfo']")[0];
+        const canonicalSI = canonicalize(siNode);
+
+        const signatureValue = crypto
+            .createSign("RSA-SHA256")
+            .update(Buffer.from(canonicalSI))
+            .sign(privateKeyPem, "base64");
+
+        // ───────── FINAL XML ─────────
+        const finalXml = buildFullXml(digest1, digest2, signatureValue);
+
+        return {
+            status: 1,
+            data: finalXml,
+            message: "XML signed successfully",
+        };
+
+    } catch (error) {
+        return {
+            status: 0,
+            data: null,
+            message: error.message,
+        };
+    }
+};
+
+---------------
+You’re right — your code has **duplicate utilities and constants**, which can easily cause confusion and even subtle signature bugs.
+
+I’ll give you a **clear cleanup plan: what to REMOVE, KEEP, and REPLACE**.
+
+---
+
+# 🧹 1. DUPLICATE CONSTANTS (REMOVE ONE SET)
+
+You currently have:
+
+### ❌ REMOVE THESE (top block)
+
+```js
+const DSIG = "http://www.w3.org/2000/09/xmldsig#";
+const C14N = "http://www.w3.org/2001/10/xml-exc-c14n#";
+const SHA256 = "http://www.w3.org/2001/04/xmlenc#sha256";
+const RSA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
+const ENV = "http://www.w3.org/2000/09/xmldsig#enveloped-signature";
+const XADES = "http://uri.etsi.org/01903/v1.3.2#";
+```
+
+### ✅ KEEP ONLY THIS OBJECT
+
+```js
+const XML_GENERATION_ALOGORITHEMS_URI = {
+    DSIG: "http://www.w3.org/2000/09/xmldsig#",
+    C14N: "http://www.w3.org/2001/10/xml-exc-c14n#",
+    SHA256: "http://www.w3.org/2001/04/xmlenc#sha256",
+    RSA256: "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+    ENVELOP_SIGNTAURE: "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
+    XADES: "http://uri.etsi.org/01903/v1.3.2#",
+};
+```
+
+👉 Reason: You are already using this object in `signXml()` → keep single source of truth.
+
+---
+
+# 🧹 2. DUPLICATE CANONICALIZATION FUNCTIONS
+
+You have:
+
+```js
+const canonicalize = (...)
+const canonicalizeXml = (...)
+```
+
+### ❌ REMOVE:
+
+```js
+const canonicalize = (node) =>
+    new ExclusiveCanonicalization().process(node, {});
+```
+
+### ✅ KEEP:
+
+```js
+const canonicalizeXml = (node) =>
+    new ExclusiveCanonicalization().process(node, {});
+```
+
+👉 Use **only one everywhere**
+
+---
+
+# 🧹 3. DUPLICATE HASH FUNCTIONS
+
+You have:
+
+```js
+sha256b64
+generateBase64Sha256Hash
+```
+
+### ❌ REMOVE:
+
+```js
+const sha256b64 = (data) =>
+    crypto.createHash("sha256").update(data).digest("base64");
+```
+
+### ✅ KEEP:
+
+```js
+const generateBase64Sha256Hash = (str) => {
+    return crypto.createHash('sha256')
+        .update(str, 'utf8')
+        .digest('base64');
+};
+```
+
+👉 Use ONE function everywhere
+
+---
+
+# 🧹 4. UNUSED / UNNECESSARY FUNCTIONS
+
+### ❌ REMOVE (if not used anywhere)
+
+```js
+const generateId = () =>
+    Date.now() + "-" + Math.floor(Math.random() * 100000);
+```
+
+👉 You already generate IDs directly in `signXml`
+
+---
+
+### ❌ REMOVE (if not used in verification)
+
+```js
+const findNodeById = (...)
+```
+
+👉 Not needed for signing
+
+---
+
+### ❌ REMOVE (optional unless used elsewhere)
+
+```js
+const formatCertificate = (...)
+```
+
+👉 You are already using `certBase64` directly
+
+---
+
+# 🧹 5. KEEP THESE (IMPORTANT)
+
+These are useful and **should stay**:
+
+```js
+const getIssuerName = (certObj) => ...
+const extractCertData = (certObj) => ...
+const getXMLDOMElement = (...)
+const getDigestValue = (...)
+const extractCertificateField = (...)
+```
+
+---
+
+# 🧹 6. FINAL CLEAN VERSION (MINIMAL SET)
+
+After cleanup, your utilities should look like:
+
+```js
+// ✅ SINGLE SOURCE OF CONSTANTS
+const XML_GENERATION_ALOGORITHEMS_URI = {
+    DSIG: "http://www.w3.org/2000/09/xmldsig#",
+    C14N: "http://www.w3.org/2001/10/xml-exc-c14n#",
+    SHA256: "http://www.w3.org/2001/04/xmlenc#sha256",
+    RSA256: "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+    ENVELOP_SIGNTAURE: "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
+    XADES: "http://uri.etsi.org/01903/v1.3.2#",
+};
+
+// ✅ ONE canonicalization function
+const canonicalizeXml = (node) =>
+    new ExclusiveCanonicalization().process(node, {});
+
+// ✅ ONE hash function
+const generateBase64Sha256Hash = (str) =>
+    crypto.createHash("sha256").update(str).digest("base64");
+
+// ✅ certificate helpers
+const getIssuerName = (certObj) =>
+    certObj.issuer.attributes
+        .map(a => `${a.shortName || a.name}=${a.value}`)
+        .join(",");
+
+const extractCertData = (certObj) => {
+    const certAsn1 = forge.pki.certificateToAsn1(certObj);
+    const certDerBytes = forge.asn1.toDer(certAsn1).getBytes();
+    const certDerBuffer = Buffer.from(certDerBytes, "binary");
+
+    return {
+        certBase64: forge.util.encode64(certDerBytes),
+        certDigest: generateBase64Sha256Hash(certDerBuffer),
+    };
+};
+
+// ✅ XML helpers (optional but fine)
+const getXMLDOMElement = (parentNode, namespace, tagName) =>
+    parentNode?.getElementsByTagNameNS(namespace, tagName)?.[0] || null;
+
+const getDigestValue = (referenceNode) =>
+    getXMLDOMElement(referenceNode, XML_GENERATION_ALOGORITHEMS_URI.DSIG, 'DigestValue')?.textContent?.trim();
